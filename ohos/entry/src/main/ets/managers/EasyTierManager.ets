@@ -48,15 +48,20 @@ export default class EasyTierManager {
   private generation: number = 0
   private pump: Promise<void> | undefined
   private failure: Error | undefined
+  private configRoot: string
   private onFailure: () => void
 
-  constructor(onFailure: () => void) {
+  constructor(configRoot: string, onFailure: () => void) {
+    this.configRoot = configRoot
     this.onFailure = onFailure
   }
 
   async start(props: EasyTierProps, connection: vpnExtension.VpnConnection): Promise<void> {
     await this.stop()
     if (!props.enable) return
+    if (!easyTier.initConfigStore(this.configRoot)) {
+      throw new Error('EasyTier private configuration storage could not start')
+    }
     const config = new EmbeddedNetworkConfig()
     config.network_name = props.networkName
     config.network_secret = props.networkSecret
@@ -77,7 +82,7 @@ export default class EasyTierManager {
       await this.waitForPeer(generation)
     } catch (error) {
       await this.stop()
-      throw error
+      throw new Error((error as Error).message)
     }
   }
 

@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ohos-easytier-${{ github.ref }}
@@ -29,17 +30,40 @@ jobs:
           repository: libo0118/EasyTier
           ref: ${{ env.EASYTIER_REF }}
           fetch-depth: 0
+      # Reuse the tested pinned core; rebuild if the artifact expires or the core changes.
+      - name: Retrieve the validated native library
+        id: previous-har
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: easytier-embedded-har
+          run-id: 38234285091
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: easytier-contrib/easytier-ohrs
+      - name: Verify the reused library revision
+        id: native-cache
+        run: |
+          package_dir=easytier-contrib/easytier-ohrs
+          if [ -s "$package_dir/easytier-ohrs.har" ] && [ "$(cat "$package_dir/easytier-commit.txt" 2>/dev/null)" = "$EASYTIER_REF" ]; then
+            echo "hit=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "hit=false" >> "$GITHUB_OUTPUT"
+          fi
       - uses: ./.github/actions/prepare-build
+        if: steps.native-cache.outputs.hit != 'true'
         with:
           target: aarch64-unknown-linux-ohos
           gui: 'false'
           pnpm: 'false'
           token: ${{ secrets.GITHUB_TOKEN }}
       - uses: Swatinem/rust-cache@v2
+        if: steps.native-cache.outputs.hit != 'true'
         with:
           shared-key: flclash-ohos
       - uses: ErBWs/setup-ohos@v1
+        if: steps.native-cache.outputs.hit != 'true'
       - name: Prepare OHOS tools
+        if: steps.native-cache.outputs.hit != 'true'
         run: |
           set -euo pipefail
           sudo apt-get install -qqy pkg-config curl libgl1-mesa-dev expect llvm clang lldb lld
@@ -54,26 +78,32 @@ jobs:
           EOF
           sudo chmod +x "$OHOS_NDK_HOME/native/llvm/aarch64-unknown-linux-ohos-clang.sh"
       - name: Format Rust sources
+        if: steps.native-cache.outputs.hit != 'true'
         run: |
           cargo fmt --all
           cargo fmt --all --manifest-path easytier-contrib/easytier-ohrs/Cargo.toml
       - name: Test SOCKS5 protocol and overlay UDP
+        if: steps.native-cache.outputs.hit != 'true'
         run: |
           cargo test --locked -p easytier-core --features proxy-smoltcp-stack --lib gateway::socks5 -- --test-threads=1
           cargo test --locked -p easytier-core --features proxy-smoltcp-stack --lib socks5_udp_associate_crosses_overlay_and_releases_resources -- --test-threads=1
       - name: Test OHOS bridge
+        if: steps.native-cache.outputs.hit != 'true'
         run: |
           cargo test --locked --manifest-path easytier-contrib/easytier-ohrs/Cargo.toml -p easytier-ohos-core -p easytier-ohos-features --lib -- --test-threads=1
           cargo check --locked --manifest-path easytier-contrib/easytier-ohrs/Cargo.toml -p easytier-ohrs --tests
       - name: Check OHOS target
+        if: steps.native-cache.outputs.hit != 'true'
         working-directory: easytier-contrib/easytier-ohrs
         run: |
           source env.sh
           cargo check --locked -p easytier-ohrs --tests --target aarch64-unknown-linux-ohos
       - uses: taiki-e/install-action@v2
+        if: steps.native-cache.outputs.hit != 'true'
         with:
           tool: ohrs
       - name: Build embedded HAR
+        if: steps.native-cache.outputs.hit != 'true'
         working-directory: easytier-contrib/easytier-ohrs
         run: |
           source env.sh

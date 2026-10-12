@@ -100,7 +100,7 @@ export default class VpnExtAbility extends VpnExtensionAbility {
     this.vpnConnection = vpnExtension.createVpnConnection(this.context)
     this.powerManager = new PowerManager()
     this.networkManager = new NetworkManager()
-    this.easyTier = new EasyTierManager(() => {
+    this.easyTier = new EasyTierManager(`${this.context.filesDir}/easytier`, () => {
       ++this.startGeneration
       this.enqueue(async () => { await this.stopVpn() })
     })
