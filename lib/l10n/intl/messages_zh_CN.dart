@@ -241,6 +241,37 @@ class MessageLookup extends MessageLookupByLibrary {
     "doYouWantToPass": MessageLookupByLibrary.simpleMessage("是否要通过"),
     "domain": MessageLookupByLibrary.simpleMessage("域名"),
     "download": MessageLookupByLibrary.simpleMessage("下载"),
+    "easyTierCidrs": MessageLookupByLibrary.simpleMessage("内网 IPv4 CIDR"),
+    "easyTierConfiguration": MessageLookupByLibrary.simpleMessage(
+      "EasyTier 配置",
+    ),
+    "easyTierConfigureHint": MessageLookupByLibrary.simpleMessage(
+      "网络名和密钥需与 EasyTier 节点一致。节点 URL 和内网 IPv4 CIDR 每行一个，保存后启动 VPN。支持 TCP/UDP 访问；VPN 启动不代表每个内网服务均已验证连通。",
+    ),
+    "easyTierDescription": MessageLookupByLibrary.simpleMessage(
+      "通过同一个 VPN 访问指定内网 IPv4 网段，需要保持规则模式。",
+    ),
+    "easyTierInvalidCidrs": MessageLookupByLibrary.simpleMessage(
+      "请输入私有 IPv4 或 100.64.0.0/10 范围的网络 CIDR，不可与 VPN 使用的 172.19.0.0/30 重叠。",
+    ),
+    "easyTierInvalidPeers": MessageLookupByLibrary.simpleMessage(
+      "请输入有效的 EasyTier 节点 URL，例如 tcp://主机:11010。",
+    ),
+    "easyTierNetworkName": MessageLookupByLibrary.simpleMessage("网络名"),
+    "easyTierNetworkSecret": MessageLookupByLibrary.simpleMessage("网络密钥"),
+    "easyTierPeerUrls": MessageLookupByLibrary.simpleMessage("节点 URL"),
+    "easyTierRuleMode": MessageLookupByLibrary.simpleMessage(
+      "EasyTier 需要规则模式，关闭 EasyTier 后才能切换出站模式。",
+    ),
+    "easyTierStartFailed": MessageLookupByLibrary.simpleMessage(
+      "VPN 启动失败，请检查 EasyTier 配置、节点连接及应用日志。",
+    ),
+    "easyTierStopBeforeEditing": MessageLookupByLibrary.simpleMessage(
+      "请先停止 VPN，再修改 EasyTier 配置，保存后重新启动。",
+    ),
+    "easyTierVpnRequired": MessageLookupByLibrary.simpleMessage(
+      "EasyTier 需要 VPN，请先关闭 EasyTier 再关闭 VPN 路由。",
+    ),
     "edit": MessageLookupByLibrary.simpleMessage("编辑"),
     "editGlobalRules": MessageLookupByLibrary.simpleMessage("编辑全局规则"),
     "editProxy": MessageLookupByLibrary.simpleMessage("编辑代理"),

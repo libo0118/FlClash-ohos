@@ -23,7 +23,9 @@ class VPNItem extends ConsumerWidget {
       delegate: SwitchDelegate(
         value: enable,
         onChanged: (value) async {
-          if (!value && system.isOhos && ref.read(appSettingProvider).easyTier.enable) {
+          if (!value &&
+              system.isOhos &&
+              ref.read(appSettingProvider).easyTier.enable) {
             context.showNotifier(appLocalizations.easyTierVpnRequired);
             return;
           }
@@ -361,7 +363,10 @@ class NetworkListView extends StatelessWidget {
           items: [const SystemProxyItem(), const BypassDomainItem()],
         ),
       if (system.isOhos)
-        ...generateSection(title: 'EasyTier', items: [const EasyTierSettings()]),
+        ...generateSection(
+          title: 'EasyTier',
+          items: [const EasyTierSettings()],
+        ),
       ...generateSection(
         title: appLocalizations.options,
         items: [

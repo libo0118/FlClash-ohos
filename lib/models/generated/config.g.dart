@@ -36,6 +36,9 @@ _AppSettingProps _$AppSettingPropsFromJson(Map<String, dynamic> json) =>
           RestoreStrategy.compatible,
       showTrayTitle: json['showTrayTitle'] as bool? ?? true,
       customUserAgent: json['customUserAgent'] as String? ?? '',
+      easyTier: json['easyTier'] == null
+          ? const EasyTierProps()
+          : EasyTierProps.fromJson(json['easyTier'] as Map<String, dynamic>),
     );
 
 Map<String, dynamic> _$AppSettingPropsToJson(_AppSettingProps instance) =>
@@ -63,6 +66,7 @@ Map<String, dynamic> _$AppSettingPropsToJson(_AppSettingProps instance) =>
       'restoreStrategy': _$RestoreStrategyEnumMap[instance.restoreStrategy]!,
       'showTrayTitle': instance.showTrayTitle,
       'customUserAgent': instance.customUserAgent,
+      'easyTier': instance.easyTier,
     };
 
 const _$RestoreStrategyEnumMap = {
@@ -82,6 +86,30 @@ const _$DashboardWidgetEnumMap = {
   DashboardWidget.intranetIp: 'intranetIp',
   DashboardWidget.memoryInfo: 'memoryInfo',
 };
+
+_EasyTierProps _$EasyTierPropsFromJson(Map<String, dynamic> json) =>
+    _EasyTierProps(
+      enable: json['enable'] as bool? ?? false,
+      networkName: json['networkName'] as String? ?? '',
+      networkSecret: json['networkSecret'] as String? ?? '',
+      peerUrls:
+          (json['peerUrls'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          const [],
+      cidrs:
+          (json['cidrs'] as List<dynamic>?)?.map((e) => e as String).toList() ??
+          const [],
+    );
+
+Map<String, dynamic> _$EasyTierPropsToJson(_EasyTierProps instance) =>
+    <String, dynamic>{
+      'enable': instance.enable,
+      'networkName': instance.networkName,
+      'networkSecret': instance.networkSecret,
+      'peerUrls': instance.peerUrls,
+      'cidrs': instance.cidrs,
+    };
 
 _AccessControlProps _$AccessControlPropsFromJson(Map<String, dynamic> json) =>
     _AccessControlProps(

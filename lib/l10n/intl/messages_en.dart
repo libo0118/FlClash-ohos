@@ -345,6 +345,41 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "domain": MessageLookupByLibrary.simpleMessage("Domain"),
     "download": MessageLookupByLibrary.simpleMessage("Download"),
+    "easyTierCidrs": MessageLookupByLibrary.simpleMessage(
+      "Intranet IPv4 CIDRs",
+    ),
+    "easyTierConfiguration": MessageLookupByLibrary.simpleMessage(
+      "EasyTier configuration",
+    ),
+    "easyTierConfigureHint": MessageLookupByLibrary.simpleMessage(
+      "Use the same network name and secret as your EasyTier nodes. Enter peer URLs and intranet IPv4 CIDRs, one per line. Start the VPN after saving. Only TCP/UDP access is supported; VPN startup does not verify each intranet service.",
+    ),
+    "easyTierDescription": MessageLookupByLibrary.simpleMessage(
+      "Access selected intranet IPv4 networks through the same VPN. Rule mode is required.",
+    ),
+    "easyTierInvalidCidrs": MessageLookupByLibrary.simpleMessage(
+      "Enter private IPv4 or 100.64.0.0/10 network CIDRs. They must not overlap 172.19.0.0/30 used by the VPN.",
+    ),
+    "easyTierInvalidPeers": MessageLookupByLibrary.simpleMessage(
+      "Enter valid EasyTier peer URLs, for example tcp://host:11010.",
+    ),
+    "easyTierNetworkName": MessageLookupByLibrary.simpleMessage("Network name"),
+    "easyTierNetworkSecret": MessageLookupByLibrary.simpleMessage(
+      "Network secret",
+    ),
+    "easyTierPeerUrls": MessageLookupByLibrary.simpleMessage("Peer URLs"),
+    "easyTierRuleMode": MessageLookupByLibrary.simpleMessage(
+      "EasyTier requires rule mode. Disable EasyTier before changing the outbound mode.",
+    ),
+    "easyTierStartFailed": MessageLookupByLibrary.simpleMessage(
+      "VPN startup failed. Check EasyTier settings, peer connectivity, and the application logs.",
+    ),
+    "easyTierStopBeforeEditing": MessageLookupByLibrary.simpleMessage(
+      "Stop the VPN before changing EasyTier settings, then start it again.",
+    ),
+    "easyTierVpnRequired": MessageLookupByLibrary.simpleMessage(
+      "EasyTier requires the VPN. Disable EasyTier before turning off VPN routing.",
+    ),
     "edit": MessageLookupByLibrary.simpleMessage("Edit"),
     "editGlobalRules": MessageLookupByLibrary.simpleMessage(
       "Edit global rules",

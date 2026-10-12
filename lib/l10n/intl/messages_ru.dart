@@ -352,6 +352,41 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "domain": MessageLookupByLibrary.simpleMessage("Домен"),
     "download": MessageLookupByLibrary.simpleMessage("Скачивание"),
+    "easyTierCidrs": MessageLookupByLibrary.simpleMessage(
+      "Внутренние IPv4 CIDR",
+    ),
+    "easyTierConfiguration": MessageLookupByLibrary.simpleMessage(
+      "Настройки EasyTier",
+    ),
+    "easyTierConfigureHint": MessageLookupByLibrary.simpleMessage(
+      "Имя сети и секрет должны совпадать с узлами EasyTier. Введите URL узлов и внутренние IPv4 CIDR, по одному на строку, сохраните и запустите VPN. Поддерживаются TCP/UDP. Запуск VPN не проверяет доступность каждой внутренней службы.",
+    ),
+    "easyTierDescription": MessageLookupByLibrary.simpleMessage(
+      "Доступ к выбранным внутренним сетям IPv4 через тот же VPN. Требуется режим правил.",
+    ),
+    "easyTierInvalidCidrs": MessageLookupByLibrary.simpleMessage(
+      "Введите сетевые CIDR частных IPv4 или диапазона 100.64.0.0/10. Пересечение с VPN-сетью 172.19.0.0/30 запрещено.",
+    ),
+    "easyTierInvalidPeers": MessageLookupByLibrary.simpleMessage(
+      "Введите корректные URL узлов EasyTier, например tcp://host:11010.",
+    ),
+    "easyTierNetworkName": MessageLookupByLibrary.simpleMessage("Имя сети"),
+    "easyTierNetworkSecret": MessageLookupByLibrary.simpleMessage(
+      "Секрет сети",
+    ),
+    "easyTierPeerUrls": MessageLookupByLibrary.simpleMessage("URL узлов"),
+    "easyTierRuleMode": MessageLookupByLibrary.simpleMessage(
+      "EasyTier требует режим правил. Отключите EasyTier перед сменой режима.",
+    ),
+    "easyTierStartFailed": MessageLookupByLibrary.simpleMessage(
+      "Не удалось запустить VPN. Проверьте настройки EasyTier, подключение узлов и журналы приложения.",
+    ),
+    "easyTierStopBeforeEditing": MessageLookupByLibrary.simpleMessage(
+      "Остановите VPN перед изменением настроек EasyTier и запустите его после сохранения.",
+    ),
+    "easyTierVpnRequired": MessageLookupByLibrary.simpleMessage(
+      "EasyTier требует VPN. Отключите EasyTier перед отключением маршрутизации VPN.",
+    ),
     "edit": MessageLookupByLibrary.simpleMessage("Редактировать"),
     "editGlobalRules": MessageLookupByLibrary.simpleMessage(
       "Редактировать глобальные правила",

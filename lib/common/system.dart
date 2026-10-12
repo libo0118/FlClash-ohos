@@ -31,7 +31,7 @@ class System {
 
   bool get isLinux => Platform.isLinux;
 
-  bool get isOhos => Platform.isOhos;
+  bool get isOhos => Platform.operatingSystem == 'ohos';
 
   Future<int> get version async {
     final deviceInfo = await DeviceInfoPlugin().deviceInfo;

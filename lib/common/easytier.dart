@@ -12,7 +12,15 @@ List<String> splitEasyTierLines(String value) => value
 bool isEasyTierPeerUrl(String value) {
   final uri = Uri.tryParse(value);
   if (uri == null ||
-      !{'tcp', 'udp', 'quic', 'ws', 'wss', 'wg', 'faketcp'}.contains(uri.scheme) ||
+      !{
+        'tcp',
+        'udp',
+        'quic',
+        'ws',
+        'wss',
+        'wg',
+        'faketcp',
+      }.contains(uri.scheme) ||
       uri.host.isEmpty ||
       uri.userInfo.isNotEmpty) {
     return false;
@@ -62,17 +70,25 @@ void applyEasyTierConfig(Map config, EasyTierProps props) {
   if (!isEasyTierConfigValid(props)) {
     throw const FormatException('Invalid EasyTier configuration');
   }
-  for (final key in ['mixed-port', 'port', 'socks-port', 'redir-port', 'tproxy-port']) {
+  for (final key in [
+    'mixed-port',
+    'port',
+    'socks-port',
+    'redir-port',
+    'tproxy-port',
+  ]) {
     if (config[key] == easyTierSocksPort) {
-      throw const FormatException('EasyTier SOCKS port conflicts with a Clash port');
+      throw const FormatException(
+        'EasyTier SOCKS port conflicts with a Clash port',
+      );
     }
   }
   final proxies = List<Map>.from(config['proxies'] ?? []);
   final names = {
     ...proxies.map((proxy) => proxy['name']),
-    ...List.from(config['proxy-groups'] ?? []).map(
-      (group) => group is Map ? group['name'] : (group as ProxyGroup).name,
-    ),
+    ...List.from(
+      config['proxy-groups'] ?? [],
+    ).map((group) => group is Map ? group['name'] : (group as ProxyGroup).name),
     ...Map.from(config['proxy-providers'] ?? {}).keys,
   };
   var name = easyTierProxyName;

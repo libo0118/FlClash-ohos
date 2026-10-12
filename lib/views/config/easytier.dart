@@ -11,7 +11,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 class EasyTierSettings extends ConsumerWidget {
   const EasyTierSettings({super.key});
 
-  Future<void> _update(BuildContext context, WidgetRef ref, {bool? enable}) async {
+  Future<void> _update(
+    BuildContext context,
+    WidgetRef ref, {
+    bool? enable,
+  }) async {
     final l10n = context.appLocalizations;
     if (ref.read(isStartProvider)) {
       globalState.showNotifier(l10n.easyTierStopBeforeEditing);
@@ -31,29 +35,36 @@ class EasyTierSettings extends ConsumerWidget {
     }
     if (props.enable) {
       final patch = ref.read(patchClashConfigProvider);
-      if ([patch.mixedPort, patch.port, patch.socksPort, patch.redirPort, patch.tproxyPort]
-          .contains(easyTierSocksPort)) {
+      if ([
+        patch.mixedPort,
+        patch.port,
+        patch.socksPort,
+        patch.redirPort,
+        patch.tproxyPort,
+      ].contains(easyTierSocksPort)) {
         globalState.showNotifier(l10n.portConflictTip);
         return;
       }
-      ref.read(vpnSettingProvider.notifier).update(
-        (state) => state.copyWith(enable: true),
-      );
-      ref.read(patchClashConfigProvider.notifier).update(
-        (state) => state.copyWith(mode: Mode.rule),
-      );
+      ref
+          .read(vpnSettingProvider.notifier)
+          .update((state) => state.copyWith(enable: true));
+      ref
+          .read(patchClashConfigProvider.notifier)
+          .update((state) => state.copyWith(mode: Mode.rule));
     }
     final nextProps = props;
-    ref.read(appSettingProvider.notifier).update(
-      (state) => state.copyWith(easyTier: nextProps),
-    );
+    ref
+        .read(appSettingProvider.notifier)
+        .update((state) => state.copyWith(easyTier: nextProps));
     ref.read(setupActionProvider.notifier).applyProfileDebounce(force: true);
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.appLocalizations;
-    final props = ref.watch(appSettingProvider.select((state) => state.easyTier));
+    final props = ref.watch(
+      appSettingProvider.select((state) => state.easyTier),
+    );
     return Column(
       children: [
         ListItem.switchItem(
@@ -89,7 +100,8 @@ class EasyTierConfigurationDialog extends StatefulWidget {
       _EasyTierConfigurationDialogState();
 }
 
-class _EasyTierConfigurationDialogState extends State<EasyTierConfigurationDialog> {
+class _EasyTierConfigurationDialogState
+    extends State<EasyTierConfigurationDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _name;
   late final TextEditingController _secret;

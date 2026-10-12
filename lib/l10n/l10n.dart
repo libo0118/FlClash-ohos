@@ -54,6 +54,136 @@ class AppLocalizations {
     return Localizations.of<AppLocalizations>(context, AppLocalizations);
   }
 
+  /// `Access selected intranet IPv4 networks through the same VPN. Rule mode is required.`
+  String get easyTierDescription {
+    return Intl.message(
+      'Access selected intranet IPv4 networks through the same VPN. Rule mode is required.',
+      name: 'easyTierDescription',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `EasyTier configuration`
+  String get easyTierConfiguration {
+    return Intl.message(
+      'EasyTier configuration',
+      name: 'easyTierConfiguration',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Use the same network name and secret as your EasyTier nodes. Enter peer URLs and intranet IPv4 CIDRs, one per line. Start the VPN after saving. Only TCP/UDP access is supported; VPN startup does not verify each intranet service.`
+  String get easyTierConfigureHint {
+    return Intl.message(
+      'Use the same network name and secret as your EasyTier nodes. Enter peer URLs and intranet IPv4 CIDRs, one per line. Start the VPN after saving. Only TCP/UDP access is supported; VPN startup does not verify each intranet service.',
+      name: 'easyTierConfigureHint',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Network name`
+  String get easyTierNetworkName {
+    return Intl.message(
+      'Network name',
+      name: 'easyTierNetworkName',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Network secret`
+  String get easyTierNetworkSecret {
+    return Intl.message(
+      'Network secret',
+      name: 'easyTierNetworkSecret',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Peer URLs`
+  String get easyTierPeerUrls {
+    return Intl.message(
+      'Peer URLs',
+      name: 'easyTierPeerUrls',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Intranet IPv4 CIDRs`
+  String get easyTierCidrs {
+    return Intl.message(
+      'Intranet IPv4 CIDRs',
+      name: 'easyTierCidrs',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Enter valid EasyTier peer URLs, for example tcp://host:11010.`
+  String get easyTierInvalidPeers {
+    return Intl.message(
+      'Enter valid EasyTier peer URLs, for example tcp://host:11010.',
+      name: 'easyTierInvalidPeers',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Enter private IPv4 or 100.64.0.0/10 network CIDRs. They must not overlap 172.19.0.0/30 used by the VPN.`
+  String get easyTierInvalidCidrs {
+    return Intl.message(
+      'Enter private IPv4 or 100.64.0.0/10 network CIDRs. They must not overlap 172.19.0.0/30 used by the VPN.',
+      name: 'easyTierInvalidCidrs',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `EasyTier requires rule mode. Disable EasyTier before changing the outbound mode.`
+  String get easyTierRuleMode {
+    return Intl.message(
+      'EasyTier requires rule mode. Disable EasyTier before changing the outbound mode.',
+      name: 'easyTierRuleMode',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `EasyTier requires the VPN. Disable EasyTier before turning off VPN routing.`
+  String get easyTierVpnRequired {
+    return Intl.message(
+      'EasyTier requires the VPN. Disable EasyTier before turning off VPN routing.',
+      name: 'easyTierVpnRequired',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Stop the VPN before changing EasyTier settings, then start it again.`
+  String get easyTierStopBeforeEditing {
+    return Intl.message(
+      'Stop the VPN before changing EasyTier settings, then start it again.',
+      name: 'easyTierStopBeforeEditing',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `VPN startup failed. Check EasyTier settings, peer connectivity, and the application logs.`
+  String get easyTierStartFailed {
+    return Intl.message(
+      'VPN startup failed. Check EasyTier settings, peer connectivity, and the application logs.',
+      name: 'easyTierStartFailed',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Rule`
   String get rule {
     return Intl.message('Rule', name: 'rule', desc: '', args: []);

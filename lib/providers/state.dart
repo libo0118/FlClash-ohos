@@ -17,9 +17,7 @@ part 'generated/state.g.dart';
 
 @riverpod
 GroupsState currentGroupsState(Ref ref) {
-  final mode = ref.watch(
-    updateParamsProvider.select((state) => state.mode),
-  );
+  final mode = ref.watch(updateParamsProvider.select((state) => state.mode));
   final groups = ref.watch(
     groupsProvider.select(
       (state) => state.map((item) {
@@ -78,9 +76,9 @@ NavigationItemsState currentNavigationItemsState(Ref ref) {
 
 @riverpod
 UpdateParams updateParams(Ref ref) {
-  final easyTierEnabled = system.isOhos && ref.watch(
-    appSettingProvider.select((state) => state.easyTier.enable),
-  );
+  final easyTierEnabled =
+      system.isOhos &&
+      ref.watch(appSettingProvider.select((state) => state.easyTier.enable));
   final routeMode = ref.watch(
     networkSettingProvider.select((state) => state.routeMode),
   );

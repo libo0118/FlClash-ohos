@@ -269,6 +269,39 @@ class MessageLookup extends MessageLookupByLibrary {
     "doYouWantToPass": MessageLookupByLibrary.simpleMessage("通過させますか？"),
     "domain": MessageLookupByLibrary.simpleMessage("ドメイン"),
     "download": MessageLookupByLibrary.simpleMessage("ダウンロード"),
+    "easyTierCidrs": MessageLookupByLibrary.simpleMessage("内部 IPv4 CIDR"),
+    "easyTierConfiguration": MessageLookupByLibrary.simpleMessage(
+      "EasyTier 設定",
+    ),
+    "easyTierConfigureHint": MessageLookupByLibrary.simpleMessage(
+      "EasyTier ノードと同じネットワーク名とシークレットを入力します。ピア URL と IPv4 CIDR は一行に一つ入力し、保存後に VPN を開始してください。TCP/UDP に対応します。VPN の開始は各内部サービスへの接続を保証しません。",
+    ),
+    "easyTierDescription": MessageLookupByLibrary.simpleMessage(
+      "同じ VPN で指定した IPv4 内部ネットワークにアクセスします。ルールモードが必要です。",
+    ),
+    "easyTierInvalidCidrs": MessageLookupByLibrary.simpleMessage(
+      "プライベート IPv4 または 100.64.0.0/10 内のネットワーク CIDR を入力してください。VPN の 172.19.0.0/30 と重複できません。",
+    ),
+    "easyTierInvalidPeers": MessageLookupByLibrary.simpleMessage(
+      "tcp://host:11010 などの有効な EasyTier ピア URL を入力してください。",
+    ),
+    "easyTierNetworkName": MessageLookupByLibrary.simpleMessage("ネットワーク名"),
+    "easyTierNetworkSecret": MessageLookupByLibrary.simpleMessage(
+      "ネットワークシークレット",
+    ),
+    "easyTierPeerUrls": MessageLookupByLibrary.simpleMessage("ピア URL"),
+    "easyTierRuleMode": MessageLookupByLibrary.simpleMessage(
+      "EasyTier はルールモードが必要です。モード変更前に EasyTier を無効にしてください。",
+    ),
+    "easyTierStartFailed": MessageLookupByLibrary.simpleMessage(
+      "VPN の起動に失敗しました。EasyTier 設定、ピア接続、アプリログを確認してください。",
+    ),
+    "easyTierStopBeforeEditing": MessageLookupByLibrary.simpleMessage(
+      "EasyTier 設定の変更前に VPN を停止し、保存後に再起動してください。",
+    ),
+    "easyTierVpnRequired": MessageLookupByLibrary.simpleMessage(
+      "EasyTier は VPN が必要です。VPN ルーティングを無効にする前に EasyTier を無効にしてください。",
+    ),
     "edit": MessageLookupByLibrary.simpleMessage("編集"),
     "editGlobalRules": MessageLookupByLibrary.simpleMessage("グローバルルールを編集"),
     "editProxy": MessageLookupByLibrary.simpleMessage("プロキシを編集"),
