@@ -101,8 +101,51 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  app-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ErBWs/setup-ohos@v2.0.0
+        with:
+          version: 26.0.0.821
+          cache: true
+      - name: Setup Flutter for OpenHarmony
+        run: |
+          git clone -b '3.44.9+ohos-0.0.1-canary1' --depth 1 https://gitcode.com/CPF-Flutter/flutter_flutter.git "$RUNNER_TOOL_CACHE/flutter-ohos"
+          git -C "$RUNNER_TOOL_CACHE/flutter-ohos" tag 3.44.10
+          git -C "$RUNNER_TOOL_CACHE/flutter-ohos" apply "$GITHUB_WORKSPACE/.github/flutter_ohos.patch"
+          echo "$RUNNER_TOOL_CACHE/flutter-ohos/bin" >> "$GITHUB_PATH"
+          echo "$RUNNER_TOOL_CACHE/flutter-ohos/bin/cache/dart-sdk/bin" >> "$GITHUB_PATH"
+          echo "PUB_CACHE=$HOME/.pub-cache" >> "$GITHUB_ENV"
+          echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
+      - run: flutter pub get
+      - name: Generate models, providers and translations
+        run: |
+          dart run intl_utils:generate
+          dart run build_runner build --delete-conflicting-outputs
+          dart format lib/common/easytier.dart lib/common/task.dart lib/core/lib.dart lib/models/config.dart lib/models/core.dart lib/models/state.dart lib/providers/action.dart lib/providers/state.dart lib/views/config/easytier.dart lib/views/config/network.dart lib/views/dashboard/widgets/outbound_mode.dart test/common/easytier_test.dart
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+      - name: Test
+        run: flutter test --reporter expanded
+      - name: Save generated source changes
+        if: always()
+        run: |
+          git diff --binary -- lib test arb > "$RUNNER_TEMP/flclash-generated.patch"
+          find lib -type f \( -name '*.g.dart' -o -name '*.freezed.dart' -o -path 'lib/l10n/*.dart' \) -print0 | tar --null -czf "$RUNNER_TEMP/generated-sources.tar.gz" -T -
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: flclash-checked-sources
+          path: |
+            ${{ runner.temp }}/flclash-generated.patch
+            ${{ runner.temp }}/generated-sources.tar.gz
+          if-no-files-found: warn
+          retention-days: 7
+
   app:
-    needs: easytier-har
+    needs: [easytier-har, app-check]
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -130,15 +173,16 @@ jobs:
           echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
       - name: Resolve Flutter dependencies
         run: flutter pub get
-      - name: Generate models, providers and translations
+      - uses: actions/download-artifact@v4
+        with:
+          name: flclash-checked-sources
+          path: ${{ runner.temp }}/checked-sources
+      - name: Restore the tested generated sources
         run: |
-          dart run intl_utils:generate
-          dart run build_runner build --delete-conflicting-outputs
-          dart format lib/common/easytier.dart lib/common/task.dart lib/core/lib.dart lib/models/config.dart lib/models/core.dart lib/models/state.dart lib/providers/action.dart lib/providers/state.dart lib/views/config/easytier.dart lib/views/config/network.dart lib/views/dashboard/widgets/outbound_mode.dart test/common/easytier_test.dart
-      - name: Analyze
-        run: flutter analyze --no-fatal-infos
-      - name: Test
-        run: flutter test --reporter expanded
+          if [ -s "$RUNNER_TEMP/checked-sources/flclash-generated.patch" ]; then
+            git apply "$RUNNER_TEMP/checked-sources/flclash-generated.patch"
+          fi
+          tar -xzf "$RUNNER_TEMP/checked-sources/generated-sources.tar.gz"
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.4'
