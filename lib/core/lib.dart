@@ -54,7 +54,11 @@ class CoreLib extends CoreHandlerInterface {
   @override
   Future<bool> startListener() async {
     await super.startListener();
-    await service?.start();
+    final started = await service?.start();
+    if (system.isOhos && started != true) {
+      await super.stopListener();
+      throw currentAppLocalizations.easyTierStartFailed;
+    }
     return true;
   }
 

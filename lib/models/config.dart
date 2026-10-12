@@ -85,6 +85,7 @@ abstract class AppSettingProps with _$AppSettingProps {
     @Default(RestoreStrategy.compatible) RestoreStrategy restoreStrategy,
     @Default(true) bool showTrayTitle,
     @Default('') String customUserAgent,
+    @Default(EasyTierProps()) EasyTierProps easyTier,
   }) = _AppSettingProps;
 
   factory AppSettingProps.fromJson(Map<String, Object?> json) =>
@@ -99,6 +100,20 @@ abstract class AppSettingProps with _$AppSettingProps {
       return defaultAppSettingProps;
     }
   }
+}
+
+@freezed
+abstract class EasyTierProps with _$EasyTierProps {
+  const factory EasyTierProps({
+    @Default(false) bool enable,
+    @Default('') String networkName,
+    @Default('') String networkSecret,
+    @Default([]) List<String> peerUrls,
+    @Default([]) List<String> cidrs,
+  }) = _EasyTierProps;
+
+  factory EasyTierProps.fromJson(Map<String, Object?> json) =>
+      _$EasyTierPropsFromJson(json);
 }
 
 @freezed

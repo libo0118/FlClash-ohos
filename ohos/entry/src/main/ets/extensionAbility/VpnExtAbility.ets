@@ -9,6 +9,7 @@ import { ChunkedSender, ChunkedReader } from '../utils/Rpc'
 import AbilityConstant from '@ohos.app.ability.AbilityConstant';
 import PowerManager from '../managers/PowerManager'
 import NetworkManager from '../managers/NetworkManager'
+import EasyTierManager from '../managers/EasyTierManager'
 
 const IPV4_ADDRESS = "172.19.0.1/30"
 const IPV6_ADDRESS = "fdfe:dcba:9876::1/126"
@@ -89,17 +90,27 @@ export default class VpnExtAbility extends VpnExtensionAbility {
   private runTime: number = 0
   private sender: ChunkedSender = new ChunkedSender()
   private uidBundleNameMap: Map<number, string> = new Map<number, string>()
+  private easyTier: EasyTierManager | undefined
+  private operation: Promise<void> = Promise.resolve()
+  private startGeneration: number = 0
+  private tunStarted: boolean = false
+  private destroyed: boolean = false
 
   onCreate(want: Want): void {
     this.vpnConnection = vpnExtension.createVpnConnection(this.context)
     this.powerManager = new PowerManager()
     this.networkManager = new NetworkManager()
+    this.easyTier = new EasyTierManager(() => {
+      ++this.startGeneration
+      this.enqueue(async () => { await this.stopVpn() })
+    })
   }
 
   onDestroy(): void {
-    this.vpnConnection?.destroy()
-    this.powerManager?.unsubscribe()
-    this.networkManager?.unsubscribe()
+    this.destroyed = true
+    ++this.startGeneration
+    this.easyTier?.cancel()
+    this.enqueue(async () => { await this.stopVpn() })
   }
 
   onConnect(want: Want): rpc.RemoteObject {
@@ -136,6 +147,11 @@ export default class VpnExtAbility extends VpnExtensionAbility {
   private toVpnConfig(options: VpnOptions): vpnExtension.VpnConfig {
     const ipv4RouteAddress = options.routeAddress.filter((it) => !it.includes(':'))
     const ipv6RouteAddress = options.routeAddress.filter((it) => it.includes(':'))
+    if (options.easyTier?.enable && ipv4RouteAddress.length > 0) {
+      for (const cidr of options.easyTier.cidrs) {
+        if (!ipv4RouteAddress.includes(cidr)) ipv4RouteAddress.push(cidr)
+      }
+    }
 
     const addresses: vpnExtension.LinkAddress[] = [this.toLinkAddress(IPV4_ADDRESS, 1)]
     const routes: vpnExtension.RouteInfo[] = ipv4RouteAddress.length > 0
@@ -240,50 +256,81 @@ export default class VpnExtAbility extends VpnExtensionAbility {
     invokeAction((callbackData: string) => { this.sendCallback(remote, callbackData) }, data)
   }
 
+  private enqueue(action: () => Promise<void>, remote?: rpc.RemoteObject): void {
+    this.operation = this.operation.then(action).catch(async (err: Error) => {
+      console.error(`VPN operation failed: ${err.message}`)
+      try {
+        await this.stopVpn()
+      } catch (cleanupError) {
+        console.error('VPN cleanup failed')
+      }
+    }).finally(() => {
+      if (remote) this.sendResult(remote, this.runTime)
+    })
+  }
+
+  private async stopVpn(): Promise<void> {
+    this.runTime = 0
+    try {
+      await this.easyTier?.stop()
+    } finally {
+      if (this.tunStarted) stopTun()
+      this.tunStarted = false
+      this.vpnId = undefined
+      this.powerManager?.unsubscribe()
+      this.networkManager?.unsubscribe()
+      await this.vpnConnection?.destroy().catch(() => {})
+    }
+  }
+
   handleStartService(vpnOptions: VpnOptions, runTime: number, remote: rpc.RemoteObject): void {
-    if (vpnOptions.enable) {
-      const vpnConfig = this.toVpnConfig(vpnOptions)
-      this.vpnConnection?.create(vpnConfig).then((fd: number) => {
+    const generation = ++this.startGeneration
+    this.easyTier?.cancel()
+    this.enqueue(async () => {
+      if (this.destroyed || generation !== this.startGeneration) return
+      await this.stopVpn()
+      if (this.destroyed || generation !== this.startGeneration) return
+      if (vpnOptions.easyTier?.enable && (!vpnOptions.enable || vpnOptions.port === 17890)) {
+        throw new Error('EasyTier requires VPN and a separate SOCKS port')
+      }
+      const connection = this.vpnConnection
+      if (!connection) throw new Error('VPN connection is unavailable')
+      if (vpnOptions.enable) {
+        const fd = await connection.create(this.toVpnConfig(vpnOptions))
+        if (this.destroyed || generation !== this.startGeneration) {
+          await this.stopVpn()
+          return
+        }
         startTUN(
-          (socketFd: number): Promise<void> => this.vpnConnection?.protect(socketFd).catch((err: Error) => {
-            console.log(`Call protect failed <= ${err.message ?? err}`)
-          }) ?? Promise.resolve(),
+          (socketFd: number): Promise<void> => connection.protect(socketFd),
           (protocol: number, source: string, target: string, uid: number) => this.resolverProcess(protocol, source, target, uid),
           fd,
           vpnOptions.stack,
           this.toTunAddress(vpnOptions),
           this.toTunDns(vpnOptions),
         )
-        if (deviceInfo.sdkApiVersion >= 20) {
-          this.vpnConnection?.generateVpnId().then((vpnId) => { this.vpnId = vpnId })
-        } else {
-          this.vpnId = util.generateRandomUUID(true);
+        this.tunStarted = true
+        if (vpnOptions.easyTier?.enable) {
+          await this.easyTier?.start(vpnOptions.easyTier, connection)
         }
-        this.powerManager?.subscribe(suspend)
-        this.networkManager?.subscribe(updateDns)
-        this.runTime = runTime !== 0 ? runTime : Date.now()
-      }).catch((err: Error) => {
-        console.log(`Call startTUN failed <= ${err.message ?? err}`)
-      }).finally(() => {
-        this.sendResult(remote, this.runTime)
-      })
-    } else {
-      this.vpnId = undefined
+        this.vpnId = deviceInfo.sdkApiVersion >= 20
+          ? await connection.generateVpnId()
+          : util.generateRandomUUID(true)
+      }
+      if (this.destroyed || generation !== this.startGeneration) {
+        await this.stopVpn()
+        return
+      }
       this.powerManager?.subscribe(suspend)
       this.networkManager?.subscribe(updateDns)
       this.runTime = runTime !== 0 ? runTime : Date.now()
-      this.sendResult(remote, this.runTime)
-    }
+    }, remote)
   }
 
   handleStopService(remote: rpc.RemoteObject): void {
-    if (this.vpnId) stopTun()
-    this.vpnId = undefined
-    this.vpnConnection?.destroy()
-    this.powerManager?.unsubscribe()
-    this.networkManager?.unsubscribe()
-    this.runTime = 0
-    this.sendResult(remote, this.runTime)
+    ++this.startGeneration
+    this.easyTier?.cancel()
+    this.enqueue(async () => { await this.stopVpn() }, remote)
   }
 
   handleGetRunTime(reply: rpc.MessageSequence): void {

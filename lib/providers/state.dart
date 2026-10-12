@@ -18,7 +18,7 @@ part 'generated/state.g.dart';
 @riverpod
 GroupsState currentGroupsState(Ref ref) {
   final mode = ref.watch(
-    patchClashConfigProvider.select((state) => state.mode),
+    updateParamsProvider.select((state) => state.mode),
   );
   final groups = ref.watch(
     groupsProvider.select(
@@ -78,6 +78,9 @@ NavigationItemsState currentNavigationItemsState(Ref ref) {
 
 @riverpod
 UpdateParams updateParams(Ref ref) {
+  final easyTierEnabled = system.isOhos && ref.watch(
+    appSettingProvider.select((state) => state.easyTier.enable),
+  );
   final routeMode = ref.watch(
     networkSettingProvider.select((state) => state.routeMode),
   );
@@ -87,7 +90,7 @@ UpdateParams updateParams(Ref ref) {
         tun: state.tun.getRealTun(routeMode),
         allowLan: state.allowLan,
         findProcessMode: state.findProcessMode,
-        mode: state.mode,
+        mode: easyTierEnabled ? Mode.rule : state.mode,
         logLevel: state.logLevel,
         ipv6: state.ipv6,
         tcpConcurrent: state.tcpConcurrent,
@@ -173,7 +176,10 @@ VpnState vpnState(Ref ref) {
   final stack = ref.watch(
     patchClashConfigProvider.select((state) => state.tun.stack),
   );
-  return VpnState(stack: stack, vpnProps: vpnProps);
+  final easyTier = system.isOhos
+      ? ref.watch(appSettingProvider.select((state) => state.easyTier))
+      : const EasyTierProps();
+  return VpnState(stack: stack, vpnProps: vpnProps, easyTier: easyTier);
 }
 
 @riverpod
@@ -612,6 +618,9 @@ SharedState sharedState(Ref ref) {
     ),
   );
   final vpnSetting = ref.watch(vpnSettingProvider);
+  final easyTier = system.isOhos
+      ? ref.watch(appSettingProvider.select((state) => state.easyTier))
+      : const EasyTierProps();
   final currentProfileName = currentProfileVM2.a;
   final selectedMap = currentProfileVM2.b;
   final onlyStatisticsProxy = appSettingVM3.a;
@@ -637,6 +646,7 @@ SharedState sharedState(Ref ref) {
       accessControlProps: vpnSetting.accessControlProps,
       allowBypass: vpnSetting.allowBypass,
       bypassDomain: bypassDomain,
+      easyTier: easyTier,
     ),
   );
 }

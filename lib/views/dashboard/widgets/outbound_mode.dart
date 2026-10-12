@@ -25,7 +25,7 @@ class OutboundMode extends StatelessWidget {
       child: Consumer(
         builder: (_, ref, _) {
           final mode = ref.watch(
-            patchClashConfigProvider.select((state) => state.mode),
+            updateParamsProvider.select((state) => state.mode),
           );
           return Theme(
             data: Theme.of(context).copyWith(
@@ -121,7 +121,7 @@ class OutboundModeV2 extends StatelessWidget {
         child: Consumer(
           builder: (_, ref, _) {
             final mode = ref.watch(
-              patchClashConfigProvider.select((state) => state.mode),
+              updateParamsProvider.select((state) => state.mode),
             );
             final thumbColor = switch (mode) {
               Mode.rule => context.colorScheme.secondaryContainer,

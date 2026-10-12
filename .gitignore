@@ -69,6 +69,7 @@ docs/
 /env.json
 /core_sha256.json
 /core/*.exe
+/ohos/entry/libs/easytier-ohrs.har
 /plugins/rust_api/.claude/
 devtools_options.yaml
 

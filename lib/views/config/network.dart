@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import 'easytier.dart';
+
 class VPNItem extends ConsumerWidget {
   const VPNItem({super.key});
 
@@ -21,6 +23,10 @@ class VPNItem extends ConsumerWidget {
       delegate: SwitchDelegate(
         value: enable,
         onChanged: (value) async {
+          if (!value && system.isOhos && ref.read(appSettingProvider).easyTier.enable) {
+            context.showNotifier(appLocalizations.easyTierVpnRequired);
+            return;
+          }
           ref
               .read(vpnSettingProvider.notifier)
               .update((state) => state.copyWith(enable: value));
@@ -354,6 +360,8 @@ class NetworkListView extends StatelessWidget {
           title: appLocalizations.system,
           items: [const SystemProxyItem(), const BypassDomainItem()],
         ),
+      if (system.isOhos)
+        ...generateSection(title: 'EasyTier', items: [const EasyTierSettings()]),
       ...generateSection(
         title: appLocalizations.options,
         items: [

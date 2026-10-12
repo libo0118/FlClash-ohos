@@ -7,7 +7,8 @@
   "author": "",
   "license": "",
   "dependencies": {
-    "core": "file:../core"
+    "core": "file:../core",
+    "easytier-ohrs": "file:./libs/easytier-ohrs.har"
   },
 }
 

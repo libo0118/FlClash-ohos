@@ -1,0 +1,174 @@
+name: FlClash with EasyTier (OHOS)
+
+on:
+  push:
+    branches: [feature/easytier-integration]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ohos-easytier-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  EASYTIER_REF: 92b3dfcda4022c0a7ea43f647e424d79dd164c02
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  easytier-har:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          repository: libo0118/EasyTier
+          ref: ${{ env.EASYTIER_REF }}
+          fetch-depth: 0
+      - uses: ./.github/actions/prepare-build
+        with:
+          target: aarch64-unknown-linux-ohos
+          gui: 'false'
+          pnpm: 'false'
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: ErBWs/setup-ohos@v1
+      - name: Prepare OHOS tools
+        run: |
+          set -euo pipefail
+          sudo apt-get install -qqy pkg-config curl libgl1-mesa-dev expect llvm clang lldb lld
+          rustup component add rustfmt
+          sudo mkdir -p "$OHOS_NDK_HOME/native/llvm"
+          sudo tee "$OHOS_NDK_HOME/native/llvm/aarch64-unknown-linux-ohos-clang.sh" >/dev/null <<'EOF'
+          #!/bin/sh
+          exec "$OHOS_NDK_HOME/native/llvm/bin/clang" \
+            -target aarch64-linux-ohos \
+            --sysroot="$OHOS_NDK_HOME/native/sysroot" \
+            -D__MUSL__ "$@"
+          EOF
+          sudo chmod +x "$OHOS_NDK_HOME/native/llvm/aarch64-unknown-linux-ohos-clang.sh"
+      - name: Format Rust sources
+        run: |
+          cargo fmt --all
+          cargo fmt --all --manifest-path easytier-contrib/easytier-ohrs/Cargo.toml
+      - name: Test SOCKS5 protocol and overlay UDP
+        run: |
+          cargo test --locked -p easytier-core --features proxy-smoltcp-stack --lib gateway::socks5 -- --test-threads=1
+          cargo test --locked -p easytier-core --features proxy-smoltcp-stack --lib socks5_udp_associate_crosses_overlay_and_releases_resources -- --test-threads=1
+      - name: Test OHOS bridge
+        run: |
+          cargo test --locked --manifest-path easytier-contrib/easytier-ohrs/Cargo.toml -p easytier-ohos-core -p easytier-ohos-features --lib -- --test-threads=1
+          cargo test --locked --manifest-path easytier-contrib/easytier-ohrs/Cargo.toml -p easytier-ohrs --lib embedded_config -- --test-threads=1
+      - name: Check OHOS target
+        working-directory: easytier-contrib/easytier-ohrs
+        run: |
+          source env.sh
+          cargo check --locked -p easytier-ohrs --tests --target aarch64-unknown-linux-ohos
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: ohrs
+      - name: Build embedded HAR
+        working-directory: easytier-contrib/easytier-ohrs
+        run: |
+          source env.sh
+          ohrs build --release --arch aarch
+          ohrs artifact
+          mv package.har easytier-ohrs.har
+          test -s easytier-ohrs.har
+          printf '%s\n' "$EASYTIER_REF" > easytier-commit.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: easytier-embedded-har
+          path: |
+            easytier-contrib/easytier-ohrs/easytier-ohrs.har
+            easytier-contrib/easytier-ohrs/easytier-commit.txt
+          if-no-files-found: error
+          retention-days: 14
+      - name: Save formatting patch
+        if: always()
+        run: git diff --binary > "$RUNNER_TEMP/easytier-format.patch"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: easytier-format-patch
+          path: ${{ runner.temp }}/easytier-format.patch
+          if-no-files-found: warn
+          retention-days: 7
+
+  app:
+    needs: easytier-har
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Use HTTPS for the public core submodule
+        run: git config --global url."https://github.com/".insteadOf "git@github.com:"
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/download-artifact@v4
+        with:
+          name: easytier-embedded-har
+          path: ohos/entry/libs
+      - uses: ErBWs/setup-ohos@v2.0.0
+        with:
+          version: 26.0.0.821
+          cache: true
+      - name: Setup Flutter for OpenHarmony
+        run: |
+          git clone -b '3.44.9+ohos-0.0.1-canary1' --depth 1 https://gitcode.com/CPF-Flutter/flutter_flutter.git "$RUNNER_TOOL_CACHE/flutter-ohos"
+          git -C "$RUNNER_TOOL_CACHE/flutter-ohos" tag 3.44.10
+          git -C "$RUNNER_TOOL_CACHE/flutter-ohos" apply "$GITHUB_WORKSPACE/.github/flutter_ohos.patch"
+          echo "$RUNNER_TOOL_CACHE/flutter-ohos/bin" >> "$GITHUB_PATH"
+          echo "$RUNNER_TOOL_CACHE/flutter-ohos/bin/cache/dart-sdk/bin" >> "$GITHUB_PATH"
+          echo "PUB_CACHE=$HOME/.pub-cache" >> "$GITHUB_ENV"
+          echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
+      - name: Resolve Flutter dependencies
+        run: flutter pub get
+      - name: Generate models, providers and translations
+        run: |
+          dart run intl_utils:generate
+          dart run build_runner build --delete-conflicting-outputs
+          dart format lib/common/easytier.dart lib/common/task.dart lib/core/lib.dart lib/models/config.dart lib/models/core.dart lib/models/state.dart lib/providers/action.dart lib/providers/state.dart lib/views/config/easytier.dart lib/views/config/network.dart lib/views/dashboard/widgets/outbound_mode.dart test/common/easytier_test.dart
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+      - name: Test
+        run: flutter test --reporter expanded
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.4'
+          cache-dependency-path: core/go.sum
+      - name: Setup OpenHarmony Go
+        run: |
+          git clone -b release-branch.go1.24 https://gitcode.com/openharmony-sig/ohos_golang_go.git "$HOME/ohos-go"
+          cd "$HOME/ohos-go/src"
+          ./make.bash
+          echo "GOROOT=$HOME/ohos-go" >> "$GITHUB_ENV"
+          echo "$HOME/ohos-go/bin" >> "$GITHUB_PATH"
+      - name: Build one unsigned HarmonyOS app
+        run: |
+          dart setup.dart ohos -v
+          test -n "$(find dist -type f \( -name '*.hap' -o -name '*.app' \) -print -quit)"
+          printf 'FlClash: %s\nEasyTier: %s\nSigning: unsigned\n' "$GITHUB_SHA" "$EASYTIER_REF" > dist/build-source.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FlClash-EasyTier-OHOS-unsigned
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Save generated source changes
+        if: always()
+        run: |
+          git diff --binary -- lib test arb ohos/oh-package-lock.json5 > "$RUNNER_TEMP/flclash-generated.patch"
+          find lib -type f \( -name '*.g.dart' -o -name '*.freezed.dart' -o -path 'lib/l10n/*.dart' \) -print0 | tar --null -czf "$RUNNER_TEMP/generated-sources.tar.gz" -T -
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: flclash-generated-sources
+          path: |
+            ${{ runner.temp }}/flclash-generated.patch
+            ${{ runner.temp }}/generated-sources.tar.gz
+          if-no-files-found: warn
+          retention-days: 7

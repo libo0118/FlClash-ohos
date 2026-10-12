@@ -35,6 +35,10 @@ class CommonAction extends _$CommonAction {
   }
 
   void updateMode() {
+    if (system.isOhos && ref.read(appSettingProvider).easyTier.enable) {
+      globalState.showNotifier(currentAppLocalizations.easyTierRuleMode);
+      return;
+    }
     ref.read(patchClashConfigProvider.notifier).update((state) {
       final index = Mode.values.indexWhere((item) => item == state.mode);
       if (index == -1) return state;
@@ -263,6 +267,10 @@ class SetupAction extends _$SetupAction {
   }
 
   void changeMode(Mode mode) {
+    if (system.isOhos && ref.read(appSettingProvider).easyTier.enable && mode != Mode.rule) {
+      globalState.showNotifier(currentAppLocalizations.easyTierRuleMode);
+      return;
+    }
     ref
         .read(patchClashConfigProvider.notifier)
         .update((state) => state.copyWith(mode: mode));
@@ -343,6 +351,9 @@ class SetupAction extends _$SetupAction {
         appendSystemDns: appendSystemDns,
         addedRules: addedRules,
         defaultUA: defaultUA,
+        easyTier: system.isOhos
+            ? ref.read(appSettingProvider).easyTier
+            : const EasyTierProps(),
       ),
     );
     return res;

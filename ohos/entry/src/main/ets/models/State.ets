@@ -13,6 +13,14 @@ export class AccessControlProps {
   }
 }
 
+export class EasyTierProps {
+  enable: boolean = false
+  networkName: string = ''
+  networkSecret: string = ''
+  peerUrls: string[] = []
+  cidrs: string[] = []
+}
+
 export class VpnOptions {
   enable: boolean = false
   port: number = 0
@@ -24,6 +32,7 @@ export class VpnOptions {
   bypassDomain: string[] = []
   stack: string = ""
   routeAddress: string[] = []
+  easyTier: EasyTierProps = new EasyTierProps()
 
   constructor() {
   }

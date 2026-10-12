@@ -36,6 +36,10 @@ on Mobile:
 
 ## Use
 
+### OpenHarmony EasyTier integration
+
+One FlClash app and one system VPN combine the existing proxy subscription with embedded EasyTier TCP/UDP access to selected intranet IPv4 networks. See [configuration and build notes](README_EASYTIER.md).
+
 ### Linux
 
 ⚠️ Make sure to install the following dependencies before using them

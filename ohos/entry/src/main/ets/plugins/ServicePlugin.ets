@@ -80,7 +80,9 @@ export default class ServicePlugin implements FlutterPlugin, MethodCallHandler {
 
   private handleSyncState(call: MethodCall, result: MethodResult): void {
     globalState.state = JSON.parse(call.args) as State
-    globalState.runState = globalState.runTime === 0 ? RunState.stop : RunState.start
+    if (globalState.runState !== RunState.pending) {
+      globalState.runState = globalState.runTime === 0 ? RunState.stop : RunState.start
+    }
     result.success("")
   }
 
@@ -96,24 +98,30 @@ export default class ServicePlugin implements FlutterPlugin, MethodCallHandler {
       const resultStub = new ResultStub("handleStart", (runTime: number) => {
         globalState.runTime = runTime
         globalState.runState = runTime !== 0 ? RunState.start : RunState.stop
+        result.success(runTime !== 0)
       })
       this.parent.handleStartService(options, globalState.runTime, resultStub).catch(() => {
         globalState.runState = RunState.stop
+        result.success(false)
       })
+      return
     }
-    result.success(true)
+    result.success(globalState.runState === RunState.start)
   }
 
   private handleStop(result: MethodResult): void {
-    if (globalState.runState === RunState.start) {
+    if (globalState.runState !== RunState.stop) {
       globalState.runState = RunState.pending
       const resultStub = new ResultStub("handleStop", (runTime: number) => {
         globalState.runTime = runTime
         globalState.runState = RunState.stop
+        result.success(true)
       })
       this.parent.handleStopService(resultStub).catch(() => {
         globalState.runState = RunState.start
+        result.success(false)
       })
+      return
     }
     result.success(true)
   }

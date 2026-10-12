@@ -297,6 +297,7 @@ abstract class VpnState with _$VpnState {
   const factory VpnState({
     required TunStack stack,
     required VpnProps vpnProps,
+    @Default(EasyTierProps()) EasyTierProps easyTier,
   }) = _VpnState;
 }
 
@@ -345,6 +346,7 @@ abstract class MakeRealProfileState with _$MakeRealProfileState {
     required List<Rule> rules,
     required List<Rule> addedRules,
     required String defaultUA,
+    @Default(EasyTierProps()) EasyTierProps easyTier,
   }) = _MakeRealProfileState;
 }
 
