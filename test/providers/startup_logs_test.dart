@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:fl_clash/common/constant.dart';
 import 'package:fl_clash/common/easytier.dart';
+import 'package:fl_clash/common/print.dart';
 import 'package:fl_clash/common/task.dart';
 import 'package:fl_clash/core/event.dart';
 import 'package:fl_clash/enum/enum.dart';
@@ -82,6 +83,36 @@ void main() {
     logs.clear();
     expect(container.read(logsProvider).list, isEmpty);
     expect(container.read(logsProvider).maxLength, maxLength);
+  });
+
+  test('background retry errors remain exportable without popups; failures still notify', () async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final consumer = _LogsEventConsumer(container);
+    coreEventManager.addListener(consumer);
+    addTearDown(() => coreEventManager.removeListener(consumer));
+    const payloads = [
+      '[EasyTier] [Core] 5[Rust:peer_task] hole punching task aborted JoinError::Cancelled(Id(123))',
+      '[EasyTier] [Core] 5[Rust:peer_manager] forward packet error Err(PeerNoConnectionError(42))',
+      '[EasyTier] 启动失败: 节点连接超时\n内核日志: 5[Rust:peer] failed',
+      '[EasyTier] VPN 套接字保护失败',
+      '[VPN] 创建失败',
+      'Start Mixed(http+socks) server error: address already in use',
+    ];
+    for (final payload in payloads) {
+      coreEventManager.sendEvent(CoreEvent(type: CoreEventType.log, data: {
+        'LogLevel': 'error', 'Payload': payload,
+        'dateTime': '2026-10-13T07:57:01.000Z',
+      }));
+    }
+    await Future<void>.delayed(Duration.zero);
+    final logs = container.read(logsProvider).list;
+    expect(logs.length, payloads.length);
+    expect(logs.every((log) => log.logLevel == LogLevel.error), true);
+    expect(consumer.notifications, payloads.skip(2).toList());
+    final exported = await encodeLogsTask(logs);
+    expect(exported, contains('JoinError::Cancelled'));
+    expect(exported, contains('PeerNoConnection'));
   });
 
   test('profile setup retains startup logs while clearing requests', () {
@@ -186,11 +217,16 @@ class _ServiceEventForwarder with ServiceListener {
 
 class _LogsEventConsumer with CoreEventListener {
   final ProviderContainer container;
+  final notifications = <String>[];
 
   _LogsEventConsumer(this.container);
 
   @override
-  void onLog(Log log) => container.read(logsProvider.notifier).add(log);
+  void onLog(Log log) => dispatchCoreLog(
+    log,
+    record: container.read(logsProvider.notifier).add,
+    notify: notifications.add,
+  );
 }
 
 class _ProfileSetupRecorder extends SetupAction {

@@ -174,7 +174,7 @@ export default class EasyTierManager {
         // native_log.rs: TRACE=2, DEBUG=3, INFO=4, ERROR=5, WARN=6。
         const level = nativeLevel === 5 ? 'error' : nativeLevel === 6 ? 'warning' :
           nativeLevel === 2 || nativeLevel === 3 ? 'debug' : 'info'
-        this.log(level, safeLine)
+        this.log(level, `[Core] ${safeLine}`)
       }
     } catch (logError) {
       if (!this.logReadFailed) {

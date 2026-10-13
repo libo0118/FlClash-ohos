@@ -4,6 +4,19 @@ import 'package:fl_clash/providers/app.dart';
 import 'package:fl_clash/state.dart';
 import 'package:flutter/material.dart';
 
+void dispatchCoreLog(
+  Log log, {
+  required void Function(Log) record,
+  required void Function(String) notify,
+}) {
+  record(log);
+  // EasyTier connection retries are diagnostics; explicit service failures still notify.
+  if (log.logLevel == LogLevel.error &&
+      !log.payload.startsWith('[EasyTier] [Core] ')) {
+    notify(log.payload);
+  }
+}
+
 class CommonPrint {
   static CommonPrint? _instance;
 

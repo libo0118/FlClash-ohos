@@ -262,6 +262,7 @@ async function main() {
   ring.push(`4[Rust:node] connected ${secret}`, `6[Rust:peer] retry ${escaped}`, `5[Rust:peer] failed ${secret}`, '3[Rust:debug] detail', '2[Rust:trace] detail', `4[RustOhrs] [Rust] initialized ${escaped}`, `5[RustOhrs] [Rust] start_kernel failed ${secret}`)
   await advance(1000)
   const nativeRows = logRows(liveRemote.calls).filter((row) => row.Payload.includes('[Rust'))
+  assert.ok(nativeRows.every((row) => row.Payload.startsWith('[EasyTier] [Core] ')), 'background Rust logs have a separate notification-policy marker')
   assert.deepEqual(nativeRows.map((row) => row.LogLevel), ['info', 'warning', 'error', 'debug', 'debug', 'info', 'error'])
   assert.equal(ring.length, 0)
   await advance(4000)
