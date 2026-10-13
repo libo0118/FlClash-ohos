@@ -159,7 +159,7 @@ jobs:
         run: |
           dart run intl_utils:generate
           dart run build_runner build --delete-conflicting-outputs
-          dart format lib/common/easytier.dart lib/common/task.dart lib/core/lib.dart lib/models/config.dart lib/models/core.dart lib/models/state.dart lib/providers/action.dart lib/providers/state.dart lib/views/config/easytier.dart lib/views/config/network.dart lib/views/dashboard/widgets/outbound_mode.dart test/common/easytier_test.dart
+          dart format lib/common/easytier.dart lib/common/task.dart lib/core/lib.dart lib/models/config.dart lib/models/core.dart lib/models/state.dart lib/providers/action.dart lib/providers/app.dart lib/providers/state.dart test/providers/startup_logs_test.dart lib/views/config/easytier.dart lib/views/config/network.dart lib/views/dashboard/widgets/outbound_mode.dart test/common/easytier_test.dart
       - name: Analyze
         run: flutter analyze --no-fatal-infos
       - name: Test

@@ -18,6 +18,22 @@ const DNS6 = "fdfe:dcba:9876::2"
 const NET_ANY = "0.0.0.0"
 const NET_ANY6 = "::"
 
+interface DiagnosticLogRow {
+  LogLevel: string
+  Payload: string
+  dateTime: string
+}
+
+interface DiagnosticEvent {
+  type: string
+  data: DiagnosticLogRow
+}
+
+interface DiagnosticMessage {
+  method: string
+  data: DiagnosticEvent
+}
+
 export enum RPCType{
   invokeAction,
   quickSetup,
@@ -95,6 +111,10 @@ export default class VpnExtAbility extends VpnExtensionAbility {
   private startGeneration: number = 0
   private tunStarted: boolean = false
   private destroyed: boolean = false
+  private diagnosticRemote: rpc.RemoteObject | undefined
+  private diagnosticBacklog: string[] = []
+  private diagnosticSending: boolean = false
+  private networkSecret: string = ''
 
   onCreate(want: Want): void {
     this.vpnConnection = vpnExtension.createVpnConnection(this.context)
@@ -103,10 +123,13 @@ export default class VpnExtAbility extends VpnExtensionAbility {
     this.easyTier = new EasyTierManager(`${this.context.filesDir}/easytier`, () => {
       ++this.startGeneration
       this.enqueue(async () => { await this.stopVpn() })
+    }, (level: string, message: string) => {
+      this.recordDiagnostic('EasyTier', level, message)
     })
   }
 
   onDestroy(): void {
+    this.recordDiagnostic('VPN', 'info', '扩展销毁，开始清理')
     this.destroyed = true
     ++this.startGeneration
     this.easyTier?.cancel()
@@ -119,6 +142,7 @@ export default class VpnExtAbility extends VpnExtensionAbility {
   }
 
   onDisconnect(want: Want): void {
+    this.diagnosticRemote = undefined
     setEventListener()
   }
 
@@ -236,6 +260,46 @@ export default class VpnExtAbility extends VpnExtensionAbility {
     this.sender.send(remote, 0, data, null)
   }
 
+  private recordDiagnostic(source: string, level: string, message: string, networkSecret: string = this.networkSecret): void {
+    try {
+      const row: DiagnosticLogRow = {
+        LogLevel: level,
+        Payload: sanitizeStartupMessage(`[${source}] ${message}`, networkSecret).slice(0, 2400),
+        dateTime: new Date().toISOString(),
+      }
+      const event: DiagnosticEvent = { type: 'log', data: row }
+      const envelope: DiagnosticMessage = { method: 'message', data: event }
+      this.diagnosticBacklog.push(JSON.stringify(envelope))
+      if (this.diagnosticBacklog.length > 100) this.diagnosticBacklog.shift()
+      this.flushDiagnosticLogs().catch(() => {})
+    } catch (logError) {
+      // 诊断传输不能阻断 VPN 启停。
+    }
+  }
+
+  private async flushDiagnosticLogs(): Promise<void> {
+    if (this.diagnosticSending || !this.diagnosticRemote) return
+    this.diagnosticSending = true
+    try {
+      while (this.diagnosticRemote && this.diagnosticBacklog.length > 0) {
+        const remote = this.diagnosticRemote
+        const data = this.diagnosticBacklog[0]
+        try {
+          await this.sender.send(remote, 0, data, null)
+        } catch (logError) {
+          if (this.diagnosticRemote === remote) this.diagnosticRemote = undefined
+          break
+        }
+        if (this.diagnosticBacklog[0] === data) this.diagnosticBacklog.shift()
+      }
+    } finally {
+      this.diagnosticSending = false
+      if (this.diagnosticRemote && this.diagnosticBacklog.length > 0) {
+        this.flushDiagnosticLogs().catch(() => {})
+      }
+    }
+  }
+
   private sendResult(remote: rpc.RemoteObject, runTime: number, error: string = ''): void {
     const options = new rpc.MessageOption()
     const send = rpc.MessageSequence.create()
@@ -250,7 +314,9 @@ export default class VpnExtAbility extends VpnExtensionAbility {
   }
 
   handleSetEventListener(remote: rpc.RemoteObject): void {
+    this.diagnosticRemote = remote
     setEventListener((callbackData: string) => { this.sendCallback(remote, callbackData) })
+    this.flushDiagnosticLogs().catch(() => {})
   }
 
   handleInvokeAction(data: string, remote: rpc.RemoteObject): void {
@@ -261,10 +327,12 @@ export default class VpnExtAbility extends VpnExtensionAbility {
     let error = ''
     this.operation = this.operation.then(action).catch(async (err: Error) => {
       error = sanitizeStartupMessage(err.message ?? 'VPN 操作失败', networkSecret).slice(0, 2400)
+      this.recordDiagnostic('VPN', 'error', error, networkSecret)
       console.error(`VPN operation failed: ${error}`)
       try {
         await this.stopVpn()
       } catch (cleanupError) {
+        this.recordDiagnostic('VPN', 'warning', startupErrorMessage('VPN 清理失败', cleanupError as Error, networkSecret), networkSecret)
         console.error('VPN cleanup failed')
       }
     }).finally(() => {
@@ -275,14 +343,22 @@ export default class VpnExtAbility extends VpnExtensionAbility {
   private async stopVpn(): Promise<void> {
     this.runTime = 0
     try {
+      this.recordDiagnostic('VPN', 'info', '清理 EasyTier 实例')
       await this.easyTier?.stop()
     } finally {
-      if (this.tunStarted) stopTun()
+      if (this.tunStarted) {
+        this.recordDiagnostic('VPN', 'info', '停止代理 TUN')
+        stopTun()
+      }
       this.tunStarted = false
       this.vpnId = undefined
+      this.recordDiagnostic('VPN', 'info', '释放状态订阅与系统 VPN 连接')
       this.powerManager?.unsubscribe()
       this.networkManager?.unsubscribe()
-      await this.vpnConnection?.destroy().catch(() => {})
+      await this.vpnConnection?.destroy().catch((error: Error) => {
+        this.recordDiagnostic('VPN', 'warning', startupErrorMessage('销毁系统 VPN 连接失败', error, this.networkSecret))
+      })
+      this.recordDiagnostic('VPN', 'info', '清理完成')
     }
   }
 
@@ -291,12 +367,16 @@ export default class VpnExtAbility extends VpnExtensionAbility {
     this.easyTier?.cancel()
     let stage = 'VPN 清理旧连接'
     const networkSecret = vpnOptions.easyTier?.networkSecret ?? ''
+    this.recordDiagnostic('VPN', 'info', `收到启动请求，EasyTier=${vpnOptions.easyTier?.enable ?? false}`, networkSecret)
     this.enqueue(async () => {
       try {
         if (this.destroyed || generation !== this.startGeneration) return
+        this.recordDiagnostic('VPN', 'info', stage)
         await this.stopVpn()
         if (this.destroyed || generation !== this.startGeneration) return
+        this.networkSecret = networkSecret
         stage = 'VPN 校验配置'
+        this.recordDiagnostic('VPN', 'info', stage)
         if (vpnOptions.easyTier?.enable && (!vpnOptions.enable || vpnOptions.port === 17890)) {
           throw new Error('EasyTier requires VPN and a separate SOCKS port')
         }
@@ -304,12 +384,14 @@ export default class VpnExtAbility extends VpnExtensionAbility {
         if (!connection) throw new Error('VPN connection is unavailable')
         if (vpnOptions.enable) {
           stage = 'VPN 创建连接'
+          this.recordDiagnostic('VPN', 'info', stage)
           const fd = await connection.create(this.toVpnConfig(vpnOptions))
           if (this.destroyed || generation !== this.startGeneration) {
             await this.stopVpn()
             return
           }
           stage = 'VPN 启动代理 TUN'
+          this.recordDiagnostic('VPN', 'info', stage)
           startTUN(
             (socketFd: number): Promise<void> => connection.protect(socketFd),
             (protocol: number, source: string, target: string, uid: number) => this.resolverProcess(protocol, source, target, uid),
@@ -321,9 +403,11 @@ export default class VpnExtAbility extends VpnExtensionAbility {
           this.tunStarted = true
           if (vpnOptions.easyTier?.enable) {
             stage = 'EasyTier 启动'
+            this.recordDiagnostic('VPN', 'info', stage)
             await this.easyTier?.start(vpnOptions.easyTier, connection)
           }
           stage = 'VPN 生成连接标识'
+          this.recordDiagnostic('VPN', 'info', stage)
           this.vpnId = deviceInfo.sdkApiVersion >= 20
             ? await connection.generateVpnId()
             : util.generateRandomUUID(true)
@@ -333,9 +417,11 @@ export default class VpnExtAbility extends VpnExtensionAbility {
           return
         }
         stage = 'VPN 订阅状态'
+        this.recordDiagnostic('VPN', 'info', stage)
         this.powerManager?.subscribe(suspend)
         this.networkManager?.subscribe(updateDns)
         this.runTime = runTime !== 0 ? runTime : Date.now()
+        this.recordDiagnostic('VPN', 'info', '启动完成')
       } catch (error) {
         throw new Error(startupErrorMessage(stage, error as Error, networkSecret))
       }
@@ -343,6 +429,7 @@ export default class VpnExtAbility extends VpnExtensionAbility {
   }
 
   handleStopService(remote: rpc.RemoteObject): void {
+    this.recordDiagnostic('VPN', 'info', '收到停止请求')
     ++this.startGeneration
     this.easyTier?.cancel()
     this.enqueue(async () => { await this.stopVpn() }, remote)

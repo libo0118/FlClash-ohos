@@ -25,7 +25,7 @@ class RealTunEnable extends _$RealTunEnable with AutoDisposeNotifierMixin {
 class Logs extends _$Logs with AutoDisposeNotifierMixin {
   @override
   FixedList<Log> build() {
-    return FixedList(0);
+    return FixedList(maxLength);
   }
 
   void add(Log value) {

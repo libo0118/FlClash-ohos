@@ -1,7 +1,17 @@
+import 'dart:convert';
+
 import 'package:fl_clash/models/models.dart';
 
 const easyTierSocksPort = 17890;
 const easyTierProxyName = '__FlClash_EasyTier__';
+
+String redactEasyTierSecret(String message, String secret) {
+  if (secret.isEmpty) return message;
+  final encoded = jsonEncode(secret);
+  return message
+      .replaceAll(encoded.substring(1, encoded.length - 1), '[已隐藏]')
+      .replaceAll(secret, '[已隐藏]');
+}
 
 List<String> splitEasyTierLines(String value) => value
     .split(RegExp(r'[\s,;]+'))

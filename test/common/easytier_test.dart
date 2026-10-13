@@ -17,6 +17,18 @@ const enabledEasyTier = EasyTierProps(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('startup logs redact raw and JSON-escaped network secrets', () {
+    const secret = 'test"key\\value\n密钥';
+    final encoded = jsonEncode(secret);
+    final escaped = encoded.substring(1, encoded.length - 1);
+    final result = redactEasyTierSecret(
+      'raw=$secret; json=$escaped; again=$secret',
+      secret,
+    );
+    expect(result, 'raw=[已隐藏]; json=[已隐藏]; again=[已隐藏]');
+    expect(redactEasyTierSecret('unchanged', ''), 'unchanged');
+  });
+
   test('EasyTier defaults to disabled and survives config persistence', () {
     expect(AppSettingProps.fromJson({}).easyTier.enable, false);
     const config = Config(

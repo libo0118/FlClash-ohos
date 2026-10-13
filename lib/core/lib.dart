@@ -55,13 +55,18 @@ class CoreLib extends CoreHandlerInterface {
   @override
   Future<bool> startListener() async {
     try {
-      await super.startListener();
+      commonPrint.log('[STARTUP] requesting Mihomo listener');
+      final listenerStarted = await super.startListener();
+      commonPrint.log('[STARTUP] Mihomo listener result=$listenerStarted');
+      commonPrint.log('[STARTUP] requesting native VPN service');
       final started = await service?.start();
+      commonPrint.log('[STARTUP] native VPN service result=$started');
       if (system.isOhos && started != true) {
         throw currentAppLocalizations.easyTierStartFailed;
       }
       return true;
     } catch (error) {
+      commonPrint.log('[STARTUP] startup failed; cleaning Mihomo listener');
       // Keep the startup failure if listener cleanup also fails.
       await super.stopListener().catchError((_) => false);
       if (error is PlatformException) {
@@ -75,8 +80,10 @@ class CoreLib extends CoreHandlerInterface {
 
   @override
   Future<bool> stopListener() async {
+    commonPrint.log('[STARTUP] stopping Mihomo listener and native VPN service');
     await super.stopListener();
     await service?.stop();
+    commonPrint.log('[STARTUP] listener/native service cleanup completed');
     return true;
   }
 

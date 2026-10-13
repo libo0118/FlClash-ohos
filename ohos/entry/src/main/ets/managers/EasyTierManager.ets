@@ -64,25 +64,90 @@ export default class EasyTierManager {
   private networkSecret: string = ''
   private configRoot: string
   private onFailure: () => void
+  private onLog: (level: string, message: string) => void
+  private logTimer: number | undefined
+  private recentLogs: string[] = []
+  private logReadFailed: boolean = false
+  private failureLogged: boolean = false
 
-  constructor(configRoot: string, onFailure: () => void) {
+  constructor(configRoot: string, onFailure: () => void, onLog: (level: string, message: string) => void) {
     this.configRoot = configRoot
     this.onFailure = onFailure
+    this.onLog = onLog
+  }
+
+  private log(level: string, message: string): void {
+    try {
+      this.onLog(level, sanitizeStartupMessage(message, this.networkSecret).slice(0, 2400))
+    } catch (logError) {
+      // 日志传输失败不能改变网络生命周期。
+    }
+  }
+
+  private reportFailure(message: string): void {
+    if (this.failureLogged) return
+    this.failureLogged = true
+    this.log('error', message)
+  }
+
+  private drainNativeLogs(discard: boolean = false): void {
+    try {
+      const lines = easyTier.drainLogLines()
+      if (discard) {
+        this.recentLogs = []
+        return
+      }
+      for (const line of lines) {
+        const safeLine = sanitizeStartupMessage(line, this.networkSecret)
+        this.recentLogs.push(safeLine.slice(0, 240))
+        if (this.recentLogs.length > 6) this.recentLogs.shift()
+        const nativeLevel = Number(line.slice(0, line.indexOf('[')))
+        // native_log.rs: TRACE=2, DEBUG=3, INFO=4, ERROR=5, WARN=6。
+        const level = nativeLevel === 5 ? 'error' : nativeLevel === 6 ? 'warning' :
+          nativeLevel === 2 || nativeLevel === 3 ? 'debug' : 'info'
+        this.log(level, safeLine)
+      }
+    } catch (logError) {
+      if (!this.logReadFailed) {
+        this.logReadFailed = true
+        this.log('warning', startupErrorMessage('读取内核日志失败', logError as Error, this.networkSecret))
+      }
+    }
+  }
+
+  private stopLogTimer(): void {
+    if (this.logTimer !== undefined) clearInterval(this.logTimer)
+    this.logTimer = undefined
+  }
+
+  private startLogTimer(generation: number): void {
+    this.stopLogTimer()
+    this.logTimer = setInterval(() => {
+      if (this.active && generation === this.generation) this.drainNativeLogs()
+      else this.stopLogTimer()
+    }, 1000)
   }
 
   async start(props: EasyTierProps, connection: vpnExtension.VpnConnection): Promise<void> {
     let stage = 'EasyTier 清理上次实例'
     try {
+      this.log('info', stage)
       await this.stop()
       if (!props.enable) return
       this.networkSecret = props.networkSecret
       this.failure = undefined
-      stage = 'EasyTier 初始化配置'
+      this.failureLogged = false
+      this.logReadFailed = false
+      this.log('info', '初始化内核日志（仅内存）')
       try {
-        easyTier.drainLogLines()
+        easyTier.initTracingSubscriber()
+        easyTier.configureLogManager(true, false)
       } catch (logError) {
-        // 日志读取失败不应阻止网络启动。
+        this.log('warning', startupErrorMessage('初始化内核日志失败', logError as Error, this.networkSecret))
       }
+      this.drainNativeLogs(true)
+      stage = 'EasyTier 初始化配置'
+      this.log('info', stage)
       if (!easyTier.initConfigStore(this.configRoot)) {
         throw new Error('私有配置存储初始化失败')
       }
@@ -92,7 +157,9 @@ export default class EasyTierManager {
       config.peer_urls = props.peerUrls
       this.active = true
       const generation = ++this.generation
+      this.startLogTimer(generation)
       stage = 'EasyTier 启用套接字保护'
+      this.log('info', stage)
       if (!easyTier.enableSocketProtection()) {
         this.active = false
         throw new Error('套接字保护未启用')
@@ -100,17 +167,24 @@ export default class EasyTierManager {
       this.pump = this.protectSockets(connection, generation)
       this.nativeStarted = true
       stage = 'EasyTier 启动内核'
+      this.log('info', stage)
       if (!easyTier.runEmbeddedNetworkInstance(JSON.stringify(config), SOCKS_PORT)) {
         throw new Error('内核未启动')
       }
+      this.drainNativeLogs()
       stage = 'EasyTier 等待节点连接'
+      this.log('info', stage)
       await this.waitForPeer(generation)
+      this.log('info', '启动完成，内置 SOCKS5 端口 17890')
     } catch (error) {
       let message = this.failure?.message ?? this.captureFailure(stage, error as Error)
+      this.reportFailure(message)
       try {
         await this.stop()
       } catch (cleanupError) {
-        message += `\n${startupErrorMessage('EasyTier 清理失败', cleanupError as Error, this.networkSecret)}`
+        const cleanupMessage = startupErrorMessage('EasyTier 清理失败', cleanupError as Error, this.networkSecret)
+        this.log('warning', cleanupMessage)
+        message += `\n${cleanupMessage}`
       }
       const failure = new Error(message.slice(0, 2400))
       this.failure = failure
@@ -120,37 +194,44 @@ export default class EasyTierManager {
 
   private captureFailure(stage: string, error: Error): string {
     let message = startupErrorMessage(stage, error, this.networkSecret).slice(0, 800)
-    try {
-      const lines = easyTier.drainLogLines().slice(-6).map((line: string) => {
-        return sanitizeStartupMessage(line, this.networkSecret).slice(0, 240)
-      })
-      if (lines.length > 0) message += `\n内核日志:\n${lines.join('\n')}`
-    } catch (logError) {
-      // 原始启动错误必须在日志不可用时仍能返回。
-    }
+    this.drainNativeLogs()
+    if (this.recentLogs.length > 0) message += `\n内核日志:\n${this.recentLogs.join('\n')}`
     return message
   }
 
   cancel(): void {
+    this.stopLogTimer()
     this.active = false
     ++this.generation
     if (this.pump || this.nativeStarted) easyTier.failSocketProtection()
   }
 
   async stop(): Promise<void> {
+    const hadWork = this.active || this.pump !== undefined || this.nativeStarted
+    if (hadWork) {
+      this.log('info', '停止实例并等待套接字保护队列结束')
+      this.drainNativeLogs()
+    }
     this.cancel()
     await this.pump
     this.pump = undefined
     if (this.nativeStarted) {
+      this.log('info', '停止内核')
       if (!easyTier.stopEmbeddedNetworkInstance()) {
         throw new Error('EasyTier instance could not stop')
       }
       this.nativeStarted = false
     }
+    if (hadWork) this.log('info', '关闭套接字保护')
     easyTier.disableSocketProtection()
+    if (hadWork) {
+      this.drainNativeLogs()
+      this.log('info', '清理完成')
+    }
   }
 
   private async protectSockets(connection: vpnExtension.VpnConnection, generation: number): Promise<void> {
+    let firstSocket = true
     try {
       while (this.active && generation === this.generation) {
         const request = await easyTier.nextSocketProtectionRequest()
@@ -165,12 +246,15 @@ export default class EasyTierManager {
           return
         }
         try {
+          if (firstSocket) this.log('info', '保护首个内核套接字')
           await connection.protect(request.socketFd)
           easyTier.completeSocketProtection(
             request.requestId,
             this.active && generation === this.generation,
             undefined,
           )
+          if (firstSocket) this.log('info', '首个内核套接字保护完成')
+          firstSocket = false
         } catch (error) {
           const failure = new Error(this.captureFailure('EasyTier VPN 套接字保护', error as Error))
           this.failure = failure
@@ -181,6 +265,7 @@ export default class EasyTierManager {
     } catch (error) {
       if (this.active && generation === this.generation) {
         this.failure = this.failure ?? new Error(this.captureFailure('EasyTier 套接字保护队列', error as Error))
+        this.reportFailure(this.failure.message)
         this.cancel()
         this.onFailure()
       }
@@ -189,9 +274,16 @@ export default class EasyTierManager {
 
   private async waitForPeer(generation: number): Promise<void> {
     const deadline = Date.now() + 30000
+    let nextProgress = 0
     while (this.active && generation === this.generation) {
       const state = JSON.parse(easyTier.collectRuntimeStateJson()) as RuntimeState
       const instance = state.instances.find((item) => item.instanceId === INSTANCE_ID)
+      if (Date.now() >= nextProgress) {
+        const peers = instance?.peers?.filter((peer) => peer.conns.some((conn) => !conn.isClosed)).length ?? 0
+        this.log('info', `连接状态：running=${instance?.running ?? false}，已连接节点=${peers}，虚拟 IPv4=${instance?.myNodeInfo?.virtualIpv4 ?? '未分配'}`)
+        this.drainNativeLogs()
+        nextProgress = Date.now() + 5000
+      }
       if (instance?.errorMessage) throw new Error(instance.errorMessage)
       if (instance?.running && instance.myNodeInfo?.virtualIpv4 &&
         instance.peers.some((peer) => peer.conns.some((conn) => !conn.isClosed))) {

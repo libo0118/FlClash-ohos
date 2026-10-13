@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:fl_clash/common/common.dart';
+import 'package:fl_clash/common/easytier.dart';
 import 'package:fl_clash/core/core.dart';
 import 'package:fl_clash/database/database.dart';
 import 'package:fl_clash/enum/enum.dart';
@@ -141,7 +142,6 @@ class SetupAction extends _$SetupAction {
     if (!ref.read(initProvider)) return;
     ref.read(delayDataSourceProvider.notifier).value = {};
     applyProfile(force: true);
-    ref.read(logsProvider.notifier).value = FixedList(500);
     ref.read(requestsProvider.notifier).value = FixedList(500);
   }
 
@@ -153,8 +153,10 @@ class SetupAction extends _$SetupAction {
     ref.read(commonActionProvider.notifier).updateTraffic();
     try {
       if (!ref.read(suspendProvider)) {
+        commonPrint.log('[STARTUP] starting listener');
         await coreController.startListener();
       } else {
+        commonPrint.log('[STARTUP] suspended; stopping listener');
         await coreController.stopListener();
       }
       await app?.startBackgroundRunning();
@@ -162,8 +164,16 @@ class SetupAction extends _$SetupAction {
         ref.read(commonActionProvider.notifier).updateRunTime();
         ref.read(commonActionProvider.notifier).updateTraffic();
       });
-    } catch (_) {
+      commonPrint.log('[STARTUP] proxy started; runtime timer active');
+    } catch (error) {
+      final secret = ref.read(appSettingProvider).easyTier.networkSecret;
+      final message = redactEasyTierSecret(error.toString(), secret);
+      commonPrint.log(
+        '[STARTUP] listener/native service failed: $message',
+        logLevel: LogLevel.warning,
+      );
       handleCrash();
+      if (message != error.toString()) throw message;
       rethrow;
     }
   }
@@ -173,11 +183,13 @@ class SetupAction extends _$SetupAction {
   }
 
   Future handleStop() async {
+    commonPrint.log('[STARTUP] stopping proxy');
     startTime = null;
     _updateTimer?.cancel();
     _updateTimer = null;
     await coreController.stopListener();
     await app?.stopBackgroundRunning();
+    commonPrint.log('[STARTUP] proxy stopped');
   }
 
   void handleCrash() {
@@ -186,6 +198,7 @@ class SetupAction extends _$SetupAction {
     _updateTimer = null;
     ref.read(runTimeProvider.notifier).value = null;
     app?.stopBackgroundRunning();
+    commonPrint.log('[STARTUP] failure cleanup; runtime state cleared');
   }
 
   Future<void> initStatus() async {
@@ -209,12 +222,40 @@ class SetupAction extends _$SetupAction {
 
   Future<void> updateStatus(bool isStart, {bool isInit = false}) async {
     if (isStart) {
+      ref.read(logsProvider.notifier).add(
+        Log.app(
+          '[STARTUP] ET-LOG-20261013-1 start requested; '
+          'isInit=$isInit, initialized=${ref.read(initProvider)}, '
+          'easyTier=${ref.read(appSettingProvider).easyTier.enable}, '
+          'mixedPort=${ref.read(patchClashConfigProvider).mixedPort}',
+        ),
+      );
       if (!isInit) {
-        final res = await ref
-            .read(coreActionProvider.notifier)
-            .tryStartCore(true);
+        commonPrint.log('[STARTUP] checking core connection');
+        final bool res;
+        try {
+          res = await ref.read(coreActionProvider.notifier).tryStartCore(true);
+        } catch (error) {
+          final message = redactEasyTierSecret(
+            error.toString(),
+            ref.read(appSettingProvider).easyTier.networkSecret,
+          );
+          ref.read(logsProvider.notifier).add(
+            Log.app('[STARTUP] core check failed: $message')
+                .copyWith(logLevel: LogLevel.warning),
+          );
+          if (message != error.toString()) throw message;
+          rethrow;
+        }
+        commonPrint.log('[STARTUP] core restart handled=$res');
         if (res) return;
-        if (!ref.read(initProvider)) return;
+        if (!ref.read(initProvider)) {
+          commonPrint.log(
+            '[STARTUP] start skipped; app is not initialized',
+            logLevel: LogLevel.warning,
+          );
+          return;
+        }
         await globalState.safeRun(
           () async {
             await _handleStart();
@@ -226,13 +267,20 @@ class SetupAction extends _$SetupAction {
         globalState.needInitStatus = false;
         ref.read(runTimeProvider.notifier).value = 0;
         try {
+          commonPrint.log('[STARTUP] applying initial profile and starting');
           await applyProfile(
             force: true,
             preloadInvoke: () async {
               await _handleStart();
             },
           );
-        } catch (_) {
+        } catch (error) {
+          final secret = ref.read(appSettingProvider).easyTier.networkSecret;
+          final message = redactEasyTierSecret(error.toString(), secret);
+          commonPrint.log(
+            '[STARTUP] initial profile/start failed: $message',
+            logLevel: LogLevel.warning,
+          );
           ref.read(runTimeProvider.notifier).value = null;
         }
       }
