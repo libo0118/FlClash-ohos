@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:fl_clash/common/constant.dart';
 import 'package:fl_clash/common/easytier.dart';
@@ -94,7 +93,7 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
-    final startup = Log.app('[STARTUP] ET-LOG-20261013-1 start requested');
+    final startup = Log.app('[STARTUP] ET-LOG-20261013-2 start requested');
     container.read(logsProvider.notifier).add(startup);
     container.read(requestsProvider.notifier).addRequest(
       TrackerInfo(
@@ -134,7 +133,7 @@ void main() {
             loggedBeforeCoreCheck = container
                 .read(logsProvider)
                 .list
-                .any((log) => log.payload.contains('ET-LOG-20261013-1'));
+                .any((log) => log.payload.contains('ET-LOG-20261013-2'));
           }),
         ),
       ],

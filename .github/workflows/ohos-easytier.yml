@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  EASYTIER_REF: a3ff04f5fe3718586c44019da2a635c4c50ae7b7
+  EASYTIER_REF: 0d670abd638bda608e1471ddd11448ee4751a033
 
 defaults:
   run:
