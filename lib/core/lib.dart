@@ -6,6 +6,7 @@ import 'package:fl_clash/models/core.dart';
 import 'package:fl_clash/plugins/service.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
+import 'package:flutter/services.dart';
 
 import 'interface.dart';
 
@@ -53,13 +54,23 @@ class CoreLib extends CoreHandlerInterface {
 
   @override
   Future<bool> startListener() async {
-    await super.startListener();
-    final started = await service?.start();
-    if (system.isOhos && started != true) {
-      await super.stopListener();
-      throw currentAppLocalizations.easyTierStartFailed;
+    try {
+      await super.startListener();
+      final started = await service?.start();
+      if (system.isOhos && started != true) {
+        throw currentAppLocalizations.easyTierStartFailed;
+      }
+      return true;
+    } catch (error) {
+      // Keep the startup failure if listener cleanup also fails.
+      await super.stopListener().catchError((_) => false);
+      if (error is PlatformException) {
+        throw error.message?.isNotEmpty == true
+            ? error.message!
+            : currentAppLocalizations.easyTierStartFailed;
+      }
+      rethrow;
     }
-    return true;
   }
 
   @override

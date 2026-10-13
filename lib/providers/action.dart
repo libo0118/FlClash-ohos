@@ -151,16 +151,21 @@ class SetupAction extends _$SetupAction {
     //The local status must be updated when performing the run task
     ref.read(commonActionProvider.notifier).updateRunTime();
     ref.read(commonActionProvider.notifier).updateTraffic();
-    if (!ref.read(suspendProvider)) {
-      await coreController.startListener();
-    } else {
-      await coreController.stopListener();
+    try {
+      if (!ref.read(suspendProvider)) {
+        await coreController.startListener();
+      } else {
+        await coreController.stopListener();
+      }
+      await app?.startBackgroundRunning();
+      _updateTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        ref.read(commonActionProvider.notifier).updateRunTime();
+        ref.read(commonActionProvider.notifier).updateTraffic();
+      });
+    } catch (_) {
+      handleCrash();
+      rethrow;
     }
-    await app?.startBackgroundRunning();
-    _updateTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      ref.read(commonActionProvider.notifier).updateRunTime();
-      ref.read(commonActionProvider.notifier).updateTraffic();
-    });
   }
 
   Future _updateStartTime() async {
@@ -210,8 +215,10 @@ class SetupAction extends _$SetupAction {
             .tryStartCore(true);
         if (res) return;
         if (!ref.read(initProvider)) return;
-        await _handleStart();
-        applyProfileDebounce(force: true, silence: true);
+        await globalState.safeRun(() async {
+          await _handleStart();
+          applyProfileDebounce(force: true, silence: true);
+        });
       } else {
         globalState.needInitStatus = false;
         ref.read(runTimeProvider.notifier).value = 0;
@@ -294,7 +301,7 @@ class SetupAction extends _$SetupAction {
   Future<void> applyProfile({
     bool silence = false,
     bool force = false,
-    VoidCallback? preloadInvoke,
+    FutureOr<void> Function()? preloadInvoke,
   }) async {
     await _setupConfig(
       force: force,
@@ -400,7 +407,7 @@ class SetupAction extends _$SetupAction {
   Future<void> _setupConfig({
     bool force = false,
     bool silence = false,
-    VoidCallback? preloadInvoke,
+    FutureOr<void> Function()? preloadInvoke,
     FutureOr Function()? onUpdated,
   }) async {
     var profile = ref.read(currentProfileProvider);

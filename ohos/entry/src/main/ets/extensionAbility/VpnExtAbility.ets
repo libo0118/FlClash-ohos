@@ -9,7 +9,7 @@ import { ChunkedSender, ChunkedReader } from '../utils/Rpc'
 import AbilityConstant from '@ohos.app.ability.AbilityConstant';
 import PowerManager from '../managers/PowerManager'
 import NetworkManager from '../managers/NetworkManager'
-import EasyTierManager from '../managers/EasyTierManager'
+import EasyTierManager, { sanitizeStartupMessage, startupErrorMessage } from '../managers/EasyTierManager'
 
 const IPV4_ADDRESS = "172.19.0.1/30"
 const IPV6_ADDRESS = "fdfe:dcba:9876::1/126"
@@ -236,12 +236,13 @@ export default class VpnExtAbility extends VpnExtensionAbility {
     this.sender.send(remote, 0, data, null)
   }
 
-  private sendResult(remote: rpc.RemoteObject, runTime: number): void {
+  private sendResult(remote: rpc.RemoteObject, runTime: number, error: string = ''): void {
     const options = new rpc.MessageOption()
     const send = rpc.MessageSequence.create()
     const reply = rpc.MessageSequence.create()
     options.setAsync(false)
     send.writeLong(runTime)
+    send.writeString(error)
     remote.sendMessageRequest(0, send, reply, options).finally(() => {
       send.reclaim()
       reply.reclaim()
@@ -256,16 +257,18 @@ export default class VpnExtAbility extends VpnExtensionAbility {
     invokeAction((callbackData: string) => { this.sendCallback(remote, callbackData) }, data)
   }
 
-  private enqueue(action: () => Promise<void>, remote?: rpc.RemoteObject): void {
+  private enqueue(action: () => Promise<void>, remote?: rpc.RemoteObject, networkSecret: string = ''): void {
+    let error = ''
     this.operation = this.operation.then(action).catch(async (err: Error) => {
-      console.error(`VPN operation failed: ${err.message}`)
+      error = sanitizeStartupMessage(err.message ?? 'VPN 操作失败', networkSecret).slice(0, 2400)
+      console.error(`VPN operation failed: ${error}`)
       try {
         await this.stopVpn()
       } catch (cleanupError) {
         console.error('VPN cleanup failed')
       }
     }).finally(() => {
-      if (remote) this.sendResult(remote, this.runTime)
+      if (remote) this.sendResult(remote, this.runTime, error)
     })
   }
 
@@ -286,45 +289,57 @@ export default class VpnExtAbility extends VpnExtensionAbility {
   handleStartService(vpnOptions: VpnOptions, runTime: number, remote: rpc.RemoteObject): void {
     const generation = ++this.startGeneration
     this.easyTier?.cancel()
+    let stage = 'VPN 清理旧连接'
+    const networkSecret = vpnOptions.easyTier?.networkSecret ?? ''
     this.enqueue(async () => {
-      if (this.destroyed || generation !== this.startGeneration) return
-      await this.stopVpn()
-      if (this.destroyed || generation !== this.startGeneration) return
-      if (vpnOptions.easyTier?.enable && (!vpnOptions.enable || vpnOptions.port === 17890)) {
-        throw new Error('EasyTier requires VPN and a separate SOCKS port')
-      }
-      const connection = this.vpnConnection
-      if (!connection) throw new Error('VPN connection is unavailable')
-      if (vpnOptions.enable) {
-        const fd = await connection.create(this.toVpnConfig(vpnOptions))
+      try {
+        if (this.destroyed || generation !== this.startGeneration) return
+        await this.stopVpn()
+        if (this.destroyed || generation !== this.startGeneration) return
+        stage = 'VPN 校验配置'
+        if (vpnOptions.easyTier?.enable && (!vpnOptions.enable || vpnOptions.port === 17890)) {
+          throw new Error('EasyTier requires VPN and a separate SOCKS port')
+        }
+        const connection = this.vpnConnection
+        if (!connection) throw new Error('VPN connection is unavailable')
+        if (vpnOptions.enable) {
+          stage = 'VPN 创建连接'
+          const fd = await connection.create(this.toVpnConfig(vpnOptions))
+          if (this.destroyed || generation !== this.startGeneration) {
+            await this.stopVpn()
+            return
+          }
+          stage = 'VPN 启动代理 TUN'
+          startTUN(
+            (socketFd: number): Promise<void> => connection.protect(socketFd),
+            (protocol: number, source: string, target: string, uid: number) => this.resolverProcess(protocol, source, target, uid),
+            fd,
+            vpnOptions.stack,
+            this.toTunAddress(vpnOptions),
+            this.toTunDns(vpnOptions),
+          )
+          this.tunStarted = true
+          if (vpnOptions.easyTier?.enable) {
+            stage = 'EasyTier 启动'
+            await this.easyTier?.start(vpnOptions.easyTier, connection)
+          }
+          stage = 'VPN 生成连接标识'
+          this.vpnId = deviceInfo.sdkApiVersion >= 20
+            ? await connection.generateVpnId()
+            : util.generateRandomUUID(true)
+        }
         if (this.destroyed || generation !== this.startGeneration) {
           await this.stopVpn()
           return
         }
-        startTUN(
-          (socketFd: number): Promise<void> => connection.protect(socketFd),
-          (protocol: number, source: string, target: string, uid: number) => this.resolverProcess(protocol, source, target, uid),
-          fd,
-          vpnOptions.stack,
-          this.toTunAddress(vpnOptions),
-          this.toTunDns(vpnOptions),
-        )
-        this.tunStarted = true
-        if (vpnOptions.easyTier?.enable) {
-          await this.easyTier?.start(vpnOptions.easyTier, connection)
-        }
-        this.vpnId = deviceInfo.sdkApiVersion >= 20
-          ? await connection.generateVpnId()
-          : util.generateRandomUUID(true)
+        stage = 'VPN 订阅状态'
+        this.powerManager?.subscribe(suspend)
+        this.networkManager?.subscribe(updateDns)
+        this.runTime = runTime !== 0 ? runTime : Date.now()
+      } catch (error) {
+        throw new Error(startupErrorMessage(stage, error as Error, networkSecret))
       }
-      if (this.destroyed || generation !== this.startGeneration) {
-        await this.stopVpn()
-        return
-      }
-      this.powerManager?.subscribe(suspend)
-      this.networkManager?.subscribe(updateDns)
-      this.runTime = runTime !== 0 ? runTime : Date.now()
-    }, remote)
+    }, remote, networkSecret)
   }
 
   handleStopService(remote: rpc.RemoteObject): void {

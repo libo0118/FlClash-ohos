@@ -5,8 +5,10 @@ import 'package:fl_clash/core/controller.dart';
 import 'package:fl_clash/core/interface.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
+import 'package:fl_clash/plugins/service.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:test/test.dart';
 
 class MockCoreHandlerInterface extends Mock implements CoreHandlerInterface {}
 
@@ -16,6 +18,7 @@ class FakeCompleter extends Fake implements Completer<dynamic> {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late MockCoreHandlerInterface mock;
   late CoreController controller;
 
@@ -90,6 +93,80 @@ void main() {
   });
 
   group('config methods', () {
+    const setupParams = SetupParams(selectedMap: {}, testUrl: 'http://x.com');
+    const setupState = SetupState(
+      profileId: null,
+      profileLastUpdateDate: null,
+      overwriteType: OverwriteType.standard,
+      rules: [],
+      proxyGroups: [],
+      addedRules: [],
+      script: null,
+      overrideDns: false,
+      dns: Dns(),
+    );
+
+    test('setupConfig waits for asynchronous startup', () async {
+      when(() => mock.setupConfig(any())).thenAnswer((_) async => 'ready');
+      final startup = Completer<void>();
+      var completed = false;
+      final result = controller
+          .setupConfig(
+            params: setupParams,
+            setupState: setupState,
+            preloadInvoke: () => startup.future,
+          )
+          .then((message) {
+            completed = true;
+            return message;
+          });
+
+      await Future<void>.delayed(Duration.zero);
+      expect(completed, false);
+      startup.complete();
+      expect(await result, 'ready');
+    });
+
+    test('setupConfig propagates asynchronous native startup error', () async {
+      when(() => mock.setupConfig(any())).thenAnswer((_) async => '');
+      final nativeService = Service();
+      final messenger = TestDefaultBinaryMessengerBinding
+          .instance
+          .defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(nativeService.methodChannel, (
+        call,
+      ) async {
+        expect(call.method, 'start');
+        await Future<void>.delayed(Duration.zero);
+        throw PlatformException(
+          code: 'VPN_START_FAILED',
+          message: 'EasyTier startup: virtual network unavailable',
+        );
+      });
+      addTearDown(() {
+        messenger.setMockMethodCallHandler(nativeService.methodChannel, null);
+      });
+
+      await expectLater(
+        controller.setupConfig(
+          params: setupParams,
+          setupState: setupState,
+          preloadInvoke: () async {
+            await nativeService.start();
+          },
+        ),
+        throwsA(
+          isA<PlatformException>()
+              .having((error) => error.code, 'code', 'VPN_START_FAILED')
+              .having(
+                (error) => error.message,
+                'message',
+                'EasyTier startup: virtual network unavailable',
+              ),
+        ),
+      );
+    });
+
     test('validateConfig delegates to interface', () async {
       when(() => mock.validateConfig('/path')).thenAnswer((_) async => 'ok');
       final result = await controller.validateConfig('/path');

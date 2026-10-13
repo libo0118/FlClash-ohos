@@ -11,6 +11,7 @@ import { State, VpnOptions } from '../models/State'
 import { publishEvent } from '../utils/Event'
 import { globalState, RunState } from '../GlobalState';
 import EntryAbility from '../entryability/EntryAbility';
+import { sanitizeStartupMessage, startupErrorMessage } from '../managers/EasyTierManager'
 
 export default class ServicePlugin implements FlutterPlugin, MethodCallHandler {
   private parent: EntryAbility
@@ -95,14 +96,23 @@ export default class ServicePlugin implements FlutterPlugin, MethodCallHandler {
     if (globalState.runState === RunState.stop) {
       globalState.runState = RunState.pending
       const options = globalState.state?.vpnOptions ?? new VpnOptions()
-      const resultStub = new ResultStub("handleStart", (runTime: number) => {
-        globalState.runTime = runTime
-        globalState.runState = runTime !== 0 ? RunState.start : RunState.stop
-        result.success(runTime !== 0)
-      })
-      this.parent.handleStartService(options, globalState.runTime, resultStub).catch(() => {
-        globalState.runState = RunState.stop
-        result.success(false)
+      const networkSecret = options.easyTier?.networkSecret ?? ''
+      let completed = false
+      const finish = (runTime: number, error: string): void => {
+        if (completed) return
+        completed = true
+        const message = sanitizeStartupMessage(error, networkSecret).slice(0, 2400)
+        globalState.runTime = message ? 0 : runTime
+        globalState.runState = globalState.runTime !== 0 ? RunState.start : RunState.stop
+        if (message) {
+          result.error('VPN_START_FAILED', message, null)
+        } else {
+          result.success(runTime !== 0)
+        }
+      }
+      const resultStub = new ResultStub("handleStart", finish)
+      this.parent.handleStartService(options, globalState.runTime, resultStub).catch((error: Error) => {
+        finish(0, startupErrorMessage('VPN 启动请求', error, networkSecret))
       })
       return
     }
