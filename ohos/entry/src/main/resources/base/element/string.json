@@ -74,7 +74,7 @@
 {"name":"widget_stopping","value":"Stopping…"},
 {"name":"widget_failed","value":"Failed · open app"},
 {"name":"widget_open_required","value":"Open app to prepare VPN"},
-{"name":"widget_open_control","value":"Open & control"},
+{"name":"widget_open_control","value":"Continue"},
 {"name":"widget_stop","value":"Turn off"},
 {"name":"widget_start","value":"Turn on"},
 {"name":"widget_open","value":"Open app"}

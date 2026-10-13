@@ -34,26 +34,20 @@ struct WidgetCard {
   }
 
   build() {
-    Column({ space: 7 }) {
-      Row() {
+    Row({ space: 8 }) {
+      Column({ space: 2 }) {
         Text('FlClash').fontSize(16).fontWeight(FontWeight.Medium)
-          .fontColor($r('sys.color.font')).layoutWeight(1)
-        Text($r('app.string.widget_open')).fontSize(11)
-          .fontColor($r('sys.color.font_secondary')).onClick(() => this.open())
-      }.width('100%')
-      Row({ space: 6 }) {
-        Text(this.statusText()).fontSize(12).fontWeight(FontWeight.Medium)
-          .fontColor($r('sys.color.font')).layoutWeight(1).maxLines(1)
+          .fontColor($r('sys.color.font')).maxLines(1)
+        Text(this.statusText()).fontSize(11).fontWeight(FontWeight.Medium)
+          .fontColor($r('sys.color.font')).maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-        if (this.easyTierEnabled && this.vpnStatus === 'connected') {
-          Text('EasyTier').fontSize(10).fontColor($r('sys.color.font_secondary'))
-        }
-      }.width('100%')
-      Row({ space: 8 }) {
-        Text(this.profileName).fontSize(11).fontColor($r('sys.color.font_secondary'))
-          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
-        Button(this.buttonText(), { type: ButtonType.Capsule }).fontSize(12).height(30)
-          .padding({ left: 12, right: 12 }).enabled(!this.busy())
+        Text(this.easyTierEnabled && this.vpnStatus === 'connected' ? `EasyTier · ${this.profileName}` : this.profileName)
+          .fontSize(10).fontColor($r('sys.color.font_secondary'))
+          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+      Column({ space: 5 }) {
+        Button(this.buttonText(), { type: ButtonType.Capsule }).fontSize(11).height(28).width(72)
+          .padding({ left: 8, right: 8 }).enabled(!this.busy())
           .onClick(() => {
             const enable = this.vpnStatus !== 'connected'
             if (!this.controlReady) this.open(enable)
@@ -62,9 +56,11 @@ struct WidgetCard {
               params: { method: 'vpnCardToggle', formId: this.formId, token: this.cardToken, enable },
             })
           })
-      }.width('100%')
+        Text($r('app.string.widget_open')).fontSize(10)
+          .fontColor($r('sys.color.font_secondary')).onClick(() => this.open())
+      }
     }
-    .padding(12).width('100%').height('100%').justifyContent(FlexAlign.Center)
+    .padding(8).width('100%').height('100%')
     .backgroundColor($r('sys.color.comp_background_primary'))
     .onAppear(() => {
       postCardAction(this, {
