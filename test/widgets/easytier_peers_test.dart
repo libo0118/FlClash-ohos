@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:fl_clash/common/constant.dart';
@@ -10,6 +9,8 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
 import 'package:fl_clash/views/dashboard/widgets/easytier_peers.dart';
 import 'package:fl_clash/views/config/easytier.dart';
+import 'package:fl_clash/views/easytier/easytier.dart';
+import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -18,6 +19,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 const _captureKey = ValueKey('easytier-render');
+const _entryKey = ValueKey('easytier-dashboard-entry');
 const _direct = EasyTierPeer(
   peerId: '42',
   hostname: 'office-gateway',
@@ -39,35 +41,24 @@ List<EasyTierPeer> _nodes() => [
   _direct,
   _relay,
   const EasyTierPeer(
-    peerId: '44',
-    hostname: 'workstation',
-    ipv4: '10.126.126.44',
-    connectionType: 'direct',
-    latencyMs: 2.6,
-    protocols: ['UDP'],
+    peerId: '44', hostname: 'workstation', ipv4: '10.126.126.44',
+    connectionType: 'direct', latencyMs: 2.6, protocols: ['UDP'],
   ),
   const EasyTierPeer(
-    peerId: '45',
-    hostname: 'nas',
-    ipv4: '10.126.126.45',
-    connectionType: 'relay',
-    latencyMs: null,
+    peerId: '45', hostname: 'nas', ipv4: '10.126.126.45',
+    connectionType: 'relay', latencyMs: null,
   ),
   const EasyTierPeer(
-    peerId: '46',
-    hostname: '',
-    ipv4: null,
-    connectionType: 'direct',
-    latencyMs: null,
+    peerId: '46', hostname: '', ipv4: null,
+    connectionType: 'direct', latencyMs: null,
   ),
 ];
 
 EasyTierRoutesState _state({
   String status = 'ready',
-  String session = 'session-1',
   List<EasyTierPeer> peers = const [_direct, _relay],
 }) => EasyTierRoutesState(
-  sessionId: session,
+  sessionId: 'session-1',
   status: status == 'ready' ? 'ready' : 'stopped',
   peerStatus: status,
   virtualIpv4: '10.126.126.159',
@@ -82,9 +73,7 @@ void main() {
   setUpAll(() async {
     if (fontPath == null || fontPath.isEmpty) return;
     final loader = FontLoader('EasyTierTestCjk');
-    loader.addFont(
-      File(fontPath).readAsBytes().then((bytes) => ByteData.sublistView(bytes)),
-    );
+    loader.addFont(File(fontPath).readAsBytes().then((bytes) => ByteData.sublistView(bytes)));
     await loader.load();
     final iconPath = Platform.environment['EASYTIER_TEST_ICON_FONT'];
     if (iconPath != null) {
@@ -94,51 +83,182 @@ void main() {
     }
   });
 
-  testWidgets('shows selectable IPs, node count and measured direct delay', (
-    tester,
-  ) async {
-    await _pumpCard(tester, _state());
-
-    expect(_selectable('10.126.126.159'), findsOneWidget);
-    expect(_selectable('10.126.126.42'), findsOneWidget);
-    expect(_selectable('office-gateway'), findsOneWidget);
-    expect(find.text('Discovered nodes: 2'), findsOneWidget);
-    expect(find.text('Running'), findsOneWidget);
-    expect(find.text('Direct'), findsOneWidget);
-    expect(find.text('Relay'), findsOneWidget);
-    expect(find.text('TCP'), findsOneWidget);
-    expect(find.text('Delay 12 ms'), findsOneWidget);
-    expect(find.text('Delay —'), findsOneWidget);
-    expect(_selectable('TCP 192.168.6.159:45000 → 192.168.6.183:11010'), findsOneWidget);
+  testWidgets('homepage entry is one compact row without network details', (tester) async {
+    var opened = 0;
+    await _pumpBody(tester, EasyTierCompactTile(state: _state(peers: _nodes()), enabled: true, onTap: () => opened++));
+    expect(find.text('Running · 5 nodes'), findsOneWidget);
+    expect(find.byType(SelectableText), findsNothing);
+    expect(find.textContaining('ms'), findsNothing);
+    expect(tester.getSize(find.byKey(_entryKey)).height, lessThanOrEqualTo(80));
+    await tester.tap(find.text('EasyTier'));
+    expect(opened, 1);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('settings is reachable when EasyTier is enabled or disabled', (tester) async {
+  testWidgets('homepage entry remains compact and tappable in every state', (tester) async {
     var opened = 0;
-    await _pumpCard(tester, _state(), onSettings: () => opened++);
+    for (final status in ['starting', 'stopped', 'stale', 'unavailable', 'disabled']) {
+      await _pumpBody(tester, EasyTierCompactTile(state: _state(status: status), enabled: status != 'disabled', onTap: () => opened++));
+      expect(tester.getSize(find.byKey(_entryKey)).height, lessThanOrEqualTo(80));
+      expect(find.byType(SelectableText), findsNothing);
+      await tester.tap(find.text('EasyTier'));
+      expect(tester.takeException(), isNull, reason: status);
+    }
+    expect(opened, 5);
+    expect(find.text('Not enabled'), findsOneWidget);
+  });
+
+  testWidgets('entry opens live details, settings, and returns through both pages', (tester) async {
+    final container = _container(_state());
+    addTearDown(container.dispose);
+    await _pumpApp(tester, const Scaffold(body: Padding(padding: EdgeInsets.all(16), child: EasyTierDashboardTile())), container: container);
+    await tester.tap(find.text('EasyTier'));
+    await tester.pumpAndSettle();
+    expect(find.byType(EasyTierDetailsPage), findsOneWidget);
+    expect(_selectable('office-gateway'), findsOneWidget);
     await tester.tap(find.byTooltip('EasyTier configuration'));
-    expect(opened, 1);
-    await _pumpCard(tester, _state(), enabled: false, onSettings: () => opened++);
-    expect(find.text('Set up and enable EasyTier'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.byType(EasyTierPage), findsOneWidget);
+    expect(find.text('EasyTier IPv6'), findsOneWidget);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.byType(EasyTierDetailsPage), findsOneWidget);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.byType(EasyTierDashboardTile), findsOneWidget);
+    expect(find.byType(EasyTierDetailsPage), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('disabled entry still opens details and configuration', (tester) async {
+    final container = _container(_state(), enabled: false);
+    addTearDown(container.dispose);
+    await _pumpApp(tester, const Scaffold(body: EasyTierDashboardTile()), container: container);
+    await tester.tap(find.text('EasyTier'));
+    await tester.pumpAndSettle();
+    expect(find.text('Not enabled'), findsOneWidget);
+    expect(find.text('Enable EasyTier in settings to view network and node status.'), findsOneWidget);
     expect(_selectable('10.126.126.42'), findsNothing);
-    await tester.tap(find.text('Set up and enable EasyTier'));
-    expect(opened, 2);
+    await tester.tap(find.byTooltip('EasyTier configuration'));
+    await tester.pumpAndSettle();
+    expect(find.byType(EasyTierPage), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('detail Consumer updates telemetry without reopening the page', (tester) async {
+    final container = _container(_state());
+    addTearDown(container.dispose);
+    await _pumpApp(tester, const EasyTierDetailsPage(), container: container);
+    container.read(easyTierRoutesProvider.notifier).applySnapshot({
+      'sessionId': 'session-1', 'revision': 1, 'status': 'ready', 'cidrs': [],
+      'peerStatus': 'ready', 'capturedAt': DateTime.now().millisecondsSinceEpoch,
+      'virtualIpv4': '10.126.126.159',
+      'peers': [{
+        'peerId': '42', 'hostname': 'updated-gateway', 'ipv4': '10.126.126.42',
+        'connectionType': 'direct', 'latencyMs': 7, 'protocols': ['tcp'], 'connections': [],
+      }],
+    });
+    await tester.pumpAndSettle();
+    expect(_selectable('updated-gateway'), findsOneWidget);
+    expect(_selectable('office-gateway'), findsNothing);
+    expect(find.text('7.0 ms'), findsOneWidget);
+    expect(find.text('Discovered nodes: 1'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    container.read(easyTierRoutesProvider.notifier).markStopped();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('details show all selectable nodes and measured direct delay', (tester) async {
+    await _pumpDetails(tester, _state(peers: _nodes()), size: const Size(390, 1200));
+    expect(_selectable('10.126.126.159'), findsOneWidget);
+    expect(_selectable('10.126.126.42'), findsOneWidget);
+    expect(_selectable('office-gateway'), findsOneWidget);
+    expect(_selectable('10.126.126.45'), findsOneWidget);
+    expect(_selectable('Node 46'), findsOneWidget);
+    expect(_selectable('IPv4 not assigned'), findsOneWidget);
+    expect(find.text('Discovered nodes: 5'), findsOneWidget);
+    expect(find.text('Direct'), findsNWidgets(3));
+    expect(find.text('Relay'), findsNWidgets(2));
+    expect(find.text('12 ms'), findsOneWidget);
+    expect(find.text('2.6 ms'), findsOneWidget);
+    expect(find.text('—'), findsNWidgets(3));
+    expect(_selectable('TCP 192.168.6.159:45000 → 192.168.6.183:11010'), findsOneWidget);
+    expect(find.byType(TextButton), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('stopped and starting details hide old nodes and local address', (tester) async {
+    for (final status in ['stopped', 'starting']) {
+      await _pumpDetails(tester, _state(status: status));
+      expect(_selectable('10.126.126.42'), findsNothing);
+      expect(_selectable('10.126.126.159'), findsNothing);
+      expect(find.text('12 ms'), findsNothing);
+      expect(tester.takeException(), isNull);
+    }
+    expect(find.text('Connecting to the EasyTier network.'), findsOneWidget);
+  });
+
+  testWidgets('stale and unavailable details never show old delay or endpoints as live', (tester) async {
+    for (final status in ['stale', 'unavailable']) {
+      await _pumpDetails(tester, _state(status: status));
+      expect(_selectable('10.126.126.42'), findsOneWidget);
+      expect(find.text('12 ms'), findsNothing);
+      expect(find.text('—'), findsNWidgets(2));
+      expect(find.text('TCP'), findsNothing);
+      expect(_selectable('TCP 192.168.6.159:45000 → 192.168.6.183:11010'), findsNothing);
+      expect(tester.takeException(), isNull);
+    }
+  });
+
+  testWidgets('empty details explain that no nodes were discovered', (tester) async {
+    await _pumpDetails(tester, _state(peers: []));
+    expect(find.text('Discovered nodes: 0'), findsOneWidget);
+    expect(find.text('No other nodes discovered yet.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('320 px enlarged text wraps names, IPs, endpoints and status', (tester) async {
+    const longName = 'warehouse-control-room-long-hostname-0123456789-abcdefghijklmnop';
+    const peer = EasyTierPeer(
+      peerId: '47', hostname: longName, ipv4: '192.168.255.254',
+      connectionType: 'direct', latencyMs: 142.8, protocols: ['TCP', 'UDP'],
+      connections: ['TCP [2001:db8:abcd:1234:5678:9012:3456:7890]:54321 → [2001:db8:abcd:ffff::1111]:11010'],
+    );
+    for (final status in ['ready', 'unavailable', 'stale']) {
+      await _pumpDetails(tester, _state(status: status, peers: const [peer]),
+        size: const Size(320, 1200), textScale: 1.6,
+        networkName: 'warehouse-production-network-with-a-long-name');
+      expect(_selectable(longName), findsOneWidget);
+      expect(_selectable('192.168.255.254'), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: status);
+    }
+    await _pumpBody(tester, EasyTierCompactTile(state: _state(status: 'unavailable'), enabled: true, onTap: () {}), size: const Size(320, 900), textScale: 1.6);
+    expect(find.byKey(_entryKey), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('compact entry follows the normal dashboard cards in the real Grid', (tester) async {
+    await _pumpApp(tester, _HomepageFixture(state: _state()));
+    final entry = tester.getTopLeft(find.byKey(_entryKey)).dy;
+    for (final id in ['outbound', 'network', 'traffic', 'intranet']) {
+      expect(entry, greaterThan(tester.getBottomLeft(find.byKey(ValueKey(id))).dy));
+    }
+    expect(tester.getSize(find.byKey(_entryKey)).height, lessThanOrEqualTo(80));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('EasyTier IPv6 switch persists independently of FlClash IPv6', (tester) async {
     final container = ProviderContainer(overrides: [
       appSettingProvider.overrideWithBuild((_, _) => const AppSettingProps(
-        easyTier: EasyTierProps(enable: true, networkName: 'test', networkSecret: 'test',
-          peerUrls: ['tcp://test.invalid:11010']),
+        easyTier: EasyTierProps(enable: true, networkName: 'test', networkSecret: 'test', peerUrls: ['tcp://test.invalid:11010']),
       )),
       vpnSettingProvider.overrideWithBuild((_, _) => const VpnProps(ipv6: true)),
       setupActionProvider.overrideWith(_SettingsSetup.new),
     ]);
     addTearDown(container.dispose);
-    await _pumpCard(tester, _state(), content: UncontrolledProviderScope(
-      container: container,
-      child: const EasyTierSettings(),
-    ));
+    final vpnState = container.listen(vpnSettingProvider, (_, _) {});
+    addTearDown(vpnState.close);
+    await _pumpBody(tester, const EasyTierSettings(), container: container);
     expect(container.read(appSettingProvider).easyTier.ipv6, false);
     await tester.tap(find.text('EasyTier IPv6'));
     await tester.pumpAndSettle();
@@ -151,219 +271,109 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('stopped and starting states hide old nodes and delay', (
-    tester,
-  ) async {
-    await _pumpCard(tester, _state(status: 'stopped'));
-    expect(find.text('Stopped'), findsOneWidget);
-    expect(find.text('Start the VPN to view node status.'), findsOneWidget);
-    expect(_selectable('10.126.126.42'), findsNothing);
-    expect(_selectable('10.126.126.159'), findsNothing);
-    expect(find.textContaining('Delay'), findsNothing);
-
-    await _pumpCard(tester, _state(status: 'starting'));
-    expect(find.text('Connecting'), findsOneWidget);
-    expect(_selectable('10.126.126.42'), findsNothing);
-    expect(find.textContaining('Delay'), findsNothing);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('stale and unavailable nodes do not show old latency as live', (
-    tester,
-  ) async {
-    for (final status in ['stale', 'unavailable']) {
-      await _pumpCard(tester, _state(status: status));
-      expect(_selectable('10.126.126.42'), findsOneWidget);
-      expect(find.text('Delay 12 ms'), findsNothing);
-      expect(find.text('Delay —'), findsNWidgets(2));
-      expect(find.text('TCP'), findsNothing);
-      expect(_selectable('TCP 192.168.6.159:45000 → 192.168.6.183:11010'), findsNothing);
-      expect(tester.takeException(), isNull);
+  testWidgets('exports real compact homepage and independent details renders', (tester) async {
+    for (final (name, brightness, textScale, status) in [
+      ('home-dark', Brightness.dark, 1.0, 'ready'),
+      ('home-light', Brightness.light, 1.0, 'ready'),
+      ('home-large-text', Brightness.dark, 1.6, 'ready'),
+      ('home-stale', Brightness.dark, 1.0, 'stale'),
+      ('home-disabled', Brightness.light, 1.0, 'disabled'),
+    ]) {
+      await _pumpApp(tester, _HomepageFixture(state: _state(status: status, peers: _nodes()), enabled: status != 'disabled'),
+        size: const Size(390, 900), brightness: brightness, textScale: textScale, locale: const Locale('zh', 'CN'));
+      expect(tester.takeException(), isNull, reason: name);
+      await _capture(tester, visualDir!, name);
     }
-  });
-
-  testWidgets('running empty state explains that no other nodes were found', (
-    tester,
-  ) async {
-    await _pumpCard(tester, _state(peers: []));
-    expect(find.text('Discovered nodes: 0'), findsOneWidget);
-    expect(find.text('No other nodes discovered yet.'), findsOneWidget);
-    expect(find.byType(TextButton), findsNothing);
-  });
-
-  testWidgets('initially shows three nodes and expands or collapses all', (
-    tester,
-  ) async {
-    await _pumpCard(tester, _state(peers: _nodes()), size: const Size(390, 1200));
-    expect(_selectable('10.126.126.44'), findsOneWidget);
-    expect(_selectable('10.126.126.45'), findsNothing);
-    await tester.tap(find.text('Show all 5 nodes'));
-    await tester.pumpAndSettle();
-    expect(_selectable('10.126.126.45'), findsOneWidget);
-    expect(_selectable('Node 46'), findsOneWidget);
-    expect(_selectable('IPv4 not assigned'), findsOneWidget);
-    await tester.tap(find.text('Collapse nodes'));
-    await tester.pumpAndSettle();
-    expect(_selectable('10.126.126.45'), findsNothing);
-
-    await tester.tap(find.text('Show all 5 nodes'));
-    await tester.pumpAndSettle();
-    await _pumpCard(
-      tester,
-      _state(peers: _nodes(), session: 'session-2'),
-      size: const Size(390, 1200),
-    );
-    expect(_selectable('10.126.126.45'), findsNothing);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('320 px and enlarged text wrap long names and statuses', (
-    tester,
-  ) async {
-    const longName =
-        'warehouse-control-room-long-hostname-0123456789-abcdefghijklmnop';
-    const peer = EasyTierPeer(
-      peerId: '47',
-      hostname: longName,
-      ipv4: '192.168.255.254',
-      connectionType: 'direct',
-      latencyMs: 142.8,
-      protocols: ['TCP', 'UDP'],
-    );
-    for (final status in ['ready', 'unavailable', 'stale']) {
-      await _pumpCard(
-        tester,
-        _state(status: status, peers: const [peer]),
-        size: const Size(320, 1200),
-        textScale: 1.6,
-        networkName: 'warehouse-production-network-with-a-long-name',
-      );
-      expect(_selectable(longName), findsOneWidget);
-      expect(_selectable('192.168.255.254'), findsOneWidget);
-      expect(tester.takeException(), isNull);
+    for (final (name, size, brightness, textScale, status) in [
+      ('detail-dark', const Size(390, 900), Brightness.dark, 1.0, 'ready'),
+      ('detail-light', const Size(390, 900), Brightness.light, 1.0, 'ready'),
+      ('detail-wide', const Size(960, 800), Brightness.light, 1.0, 'ready'),
+      ('detail-large-text', const Size(320, 1200), Brightness.dark, 1.6, 'ready'),
+      ('detail-stale', const Size(390, 900), Brightness.dark, 1.0, 'stale'),
+      ('detail-stopped', const Size(390, 900), Brightness.light, 1.0, 'stopped'),
+      ('detail-disabled', const Size(390, 900), Brightness.light, 1.0, 'disabled'),
+    ]) {
+      final container = _container(_state(status: status, peers: _nodes()), enabled: status != 'disabled');
+      await _pumpApp(tester, const Scaffold(body: EasyTierDashboardTile()), container: container,
+        size: size, brightness: brightness, textScale: textScale, locale: const Locale('zh', 'CN'));
+      await tester.tap(find.text('EasyTier'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: name);
+      await _capture(tester, visualDir!, name);
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
     }
-  });
-
-  testWidgets(
-    'exports real card renders in phone, wide and enlarged-text layouts',
-    (tester) async {
-      final cases = [
-        ('phone-dark', const Size(390, 900), Brightness.dark, 1.0, 'ready'),
-        ('phone-light', const Size(390, 900), Brightness.light, 1.0, 'ready'),
-        ('wide', const Size(960, 800), Brightness.light, 1.0, 'ready'),
-        ('phone-large-text', const Size(320, 1200), Brightness.dark, 1.6, 'ready'),
-        ('phone-stale', const Size(390, 900), Brightness.dark, 1.0, 'stale'),
-        ('phone-stopped', const Size(390, 900), Brightness.light, 1.0, 'stopped'),
-        ('phone-disabled', const Size(390, 900), Brightness.light, 1.0, 'disabled'),
-      ];
-      for (final (name, size, brightness, textScale, status) in cases) {
-        await _pumpCard(
-          tester,
-          _state(status: status, peers: _nodes()),
-          size: size,
-          brightness: brightness,
-          textScale: textScale,
-          locale: const Locale('zh', 'CN'),
-          enabled: status != 'disabled',
-        );
-        expect(tester.takeException(), isNull, reason: name);
-        await _capture(tester, visualDir!, name);
-      }
-    },
-    skip: visualDir == null || visualDir.isEmpty,
-  );
+  }, skip: visualDir == null || visualDir.isEmpty);
 }
 
-Finder _selectable(String text) => find.byWidgetPredicate(
-  (widget) => widget is SelectableText && widget.data == text,
-);
+Finder _selectable(String text) => find.byWidgetPredicate((widget) => widget is SelectableText && widget.data == text);
 
-Future<void> _pumpCard(
-  WidgetTester tester,
-  EasyTierRoutesState state, {
-  Size size = const Size(390, 900),
-  Brightness brightness = Brightness.light,
-  double textScale = 1,
-  Locale locale = const Locale('en'),
-  String networkName = 'office-net',
-  bool enabled = true,
-  VoidCallback? onSettings,
-  Widget? content,
+ProviderContainer _container(EasyTierRoutesState state, {bool enabled = true}) => ProviderContainer(overrides: [
+  appSettingProvider.overrideWithBuild((_, _) => AppSettingProps(easyTier: EasyTierProps(enable: enabled, networkName: 'office-net'))),
+  easyTierRoutesProvider.overrideWith(() => _RoutesFixture(state)),
+  isMobileViewProvider.overrideWithValue(true),
+]);
+
+Future<void> _pumpDetails(WidgetTester tester, EasyTierRoutesState state, {
+  Size size = const Size(390, 900), double textScale = 1, String networkName = 'office-net',
+}) => _pumpBody(tester, EasyTierDetailsBody(state: state, networkName: networkName, enabled: true), size: size, textScale: textScale);
+
+Future<void> _pumpBody(WidgetTester tester, Widget content, {
+  Size size = const Size(390, 900), double textScale = 1, ProviderContainer? container,
+}) => _pumpApp(tester, Scaffold(appBar: AppBar(title: const Text('Dashboard')), body: SingleChildScrollView(
+  padding: const EdgeInsets.all(16), child: SizedBox(width: double.infinity, child: content),
+)), size: size, textScale: textScale, container: container);
+
+Future<void> _pumpApp(WidgetTester tester, Widget home, {
+  Size size = const Size(390, 900), Brightness brightness = Brightness.light,
+  double textScale = 1, Locale locale = const Locale('en'), ProviderContainer? container,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  await tester.pumpWidget(
-    MaterialApp(
-      locale: locale,
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-      ],
-      supportedLocales: AppLocalizations.delegate.supportedLocales,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(defaultPrimaryColor),
-          brightness: brightness,
-          dynamicSchemeVariant: DynamicSchemeVariant.content,
-        ),
-        fontFamily: Platform.environment['EASYTIER_TEST_FONT'] == null
-            ? null
-            : 'EasyTierTestCjk',
-      ),
-      builder: (context, child) {
-        globalState.theme = CommonTheme.of(context, textScale);
-        return MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            textScaler: TextScaler.linear(textScale),
-          ),
-          child: child!,
-        );
-      },
-      home: RepaintBoundary(
-        key: _captureKey,
-        child: Scaffold(
-          appBar: AppBar(
-            title: Builder(
-              builder: (context) => Text(AppLocalizations.of(context).dashboard),
-            ),
-          ),
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: SizedBox(
-              width: double.infinity,
-              child: content ?? EasyTierPeersCard(
-                state: state,
-                networkName: networkName,
-                enabled: enabled,
-                onSettings: onSettings ?? () {},
-              ),
-            ),
-          ),
-        ),
-      ),
+  if (container != null) globalState.container = container;
+  final app = MaterialApp(
+    locale: locale,
+    localizationsDelegates: const [AppLocalizations.delegate, GlobalMaterialLocalizations.delegate, GlobalCupertinoLocalizations.delegate, GlobalWidgetsLocalizations.delegate],
+    supportedLocales: AppLocalizations.delegate.supportedLocales,
+    theme: ThemeData(
+      colorScheme: ColorScheme.fromSeed(seedColor: const Color(defaultPrimaryColor), brightness: brightness, dynamicSchemeVariant: DynamicSchemeVariant.content),
+      fontFamily: Platform.environment['EASYTIER_TEST_FONT'] == null ? null : 'EasyTierTestCjk',
     ),
+    builder: (context, child) {
+      globalState.theme = CommonTheme.of(context, textScale);
+      return RepaintBoundary(key: _captureKey, child: MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(textScale)), child: child!,
+      ));
+    },
+    home: home,
   );
+  await tester.pumpWidget(container == null ? app : UncontrolledProviderScope(container: container, child: app));
   await tester.pumpAndSettle();
 }
 
 Future<void> _capture(WidgetTester tester, String directory, String name) async {
-  final boundary = tester.renderObject<RenderRepaintBoundary>(
-    find.byKey(_captureKey),
-  );
+  final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(_captureKey));
   await tester.runAsync(() async {
     final image = await boundary.toImage(pixelRatio: 2);
     final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
     if (bytes == null) throw StateError('PNG render returned no bytes');
     await Directory(directory).create(recursive: true);
-    await File(
-      '$directory/easytier-$name.png',
-    ).writeAsBytes(bytes.buffer.asUint8List());
+    await File('$directory/easytier-$name.png').writeAsBytes(bytes.buffer.asUint8List());
     image.dispose();
   });
+}
+
+class _RoutesFixture extends EasyTierRoutes {
+  final EasyTierRoutesState initial;
+  _RoutesFixture(this.initial);
+
+  @override
+  EasyTierRoutesState build() {
+    super.build();
+    return initial;
+  }
 }
 
 class _SettingsSetup extends SetupAction {
@@ -372,4 +382,49 @@ class _SettingsSetup extends SetupAction {
 
   @override
   void applyProfileDebounce({bool silence = false, bool force = false}) {}
+}
+
+class _HomepageFixture extends StatelessWidget {
+  final EasyTierRoutesState state;
+  final bool enabled;
+  const _HomepageFixture({required this.state, this.enabled = true});
+
+  Widget _card(String id, String title, IconData icon, Widget content) => GridItem(
+    crossAxisCellCount: 4,
+    child: CommonCard(key: ValueKey(id), child: Column(mainAxisSize: MainAxisSize.min, children: [
+      InfoHeader(info: Info(label: title, iconData: icon)),
+      Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 16), child: content),
+    ])),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.dashboard), actions: [IconButton(onPressed: () {}, icon: const Icon(Icons.edit))]),
+      body: SingleChildScrollView(padding: const EdgeInsets.all(16).copyWith(bottom: 88), child: Grid(
+        crossAxisCount: 8, crossAxisSpacing: 14, mainAxisSpacing: 14,
+        children: [
+          _card('outbound', l10n.outboundMode, Icons.alt_route, Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            for (final (label, selected) in [(l10n.rule, true), (l10n.global, false), (l10n.direct, false)])
+              Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Row(children: [Icon(selected ? Icons.radio_button_checked : Icons.radio_button_unchecked), const SizedBox(width: 8), Expanded(child: Text(label))])),
+          ])),
+          _card('network', l10n.networkDetection, Icons.public, const Text('203.0.113.24')),
+          _card('traffic', l10n.trafficUsage, Icons.data_saver_off, Column(children: [
+            const Icon(Icons.data_saver_off, size: 56), const SizedBox(height: 12),
+            Text('↑ 128 KiB'), const SizedBox(height: 8), Text('↓ 2.4 MiB'),
+          ])),
+          _card('intranet', l10n.intranetIP, Icons.devices_outlined, const Text('192.168.6.159')),
+          GridItem(crossAxisCellCount: 8, child: EasyTierCompactTile(state: state, enabled: enabled, onTap: () {})),
+        ],
+      )),
+      floatingActionButton: FloatingActionButton.extended(onPressed: () {}, icon: const Icon(Icons.pause), label: const Text('00:12:36')),
+      bottomNavigationBar: NavigationBar(selectedIndex: 0, destinations: [
+        NavigationDestination(icon: const Icon(Icons.dashboard), label: l10n.dashboard),
+        NavigationDestination(icon: const Icon(Icons.view_list), label: l10n.proxies),
+        NavigationDestination(icon: const Icon(Icons.folder), label: l10n.profile),
+        NavigationDestination(icon: const Icon(Icons.handyman), label: l10n.tools),
+      ]),
+    );
+  }
 }

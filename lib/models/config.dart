@@ -44,7 +44,10 @@ const List<DashboardWidget> defaultDashboardWidgets = [
   DashboardWidget.networkDetection,
   DashboardWidget.trafficUsage,
   DashboardWidget.intranetIp,
+  DashboardWidget.easyTier,
 ];
+
+const currentDashboardLayoutVersion = 1;
 
 List<DashboardWidget> dashboardWidgetsSafeFormJson(
   List<dynamic>? dashboardWidgets,
@@ -59,6 +62,24 @@ List<DashboardWidget> dashboardWidgetsSafeFormJson(
   }
 }
 
+AppSettingProps _appSettingPropsFromJson(Map<String, Object?> json) {
+  final rawVersion = json['dashboardLayoutVersion'];
+  final version = rawVersion is num && rawVersion.isFinite ? rawVersion : 0;
+  final props = _$AppSettingPropsFromJson({
+    ...json,
+    'dashboardLayoutVersion': version,
+  });
+  if (version >= currentDashboardLayoutVersion) {
+    return props;
+  }
+  return props.copyWith(
+    dashboardLayoutVersion: currentDashboardLayoutVersion,
+    dashboardWidgets: props.dashboardWidgets.contains(DashboardWidget.easyTier)
+        ? props.dashboardWidgets
+        : [...props.dashboardWidgets, DashboardWidget.easyTier],
+  );
+}
+
 @freezed
 abstract class AppSettingProps with _$AppSettingProps {
   const factory AppSettingProps({
@@ -66,6 +87,7 @@ abstract class AppSettingProps with _$AppSettingProps {
     @Default(defaultDashboardWidgets)
     @JsonKey(fromJson: dashboardWidgetsSafeFormJson)
     List<DashboardWidget> dashboardWidgets,
+    @Default(currentDashboardLayoutVersion) int dashboardLayoutVersion,
     @Default(false) bool onlyStatisticsProxy,
     @Default(false) bool autoLaunch,
     @Default(false) bool silentLaunch,
@@ -89,7 +111,7 @@ abstract class AppSettingProps with _$AppSettingProps {
   }) = _AppSettingProps;
 
   factory AppSettingProps.fromJson(Map<String, Object?> json) =>
-      _$AppSettingPropsFromJson(json);
+      _appSettingPropsFromJson(json);
 
   factory AppSettingProps.safeFromJson(Map<String, Object?>? json) {
     try {

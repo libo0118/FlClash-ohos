@@ -145,6 +145,161 @@ void main() {
     });
   });
 
+  group('EasyTier dashboard layout persistence', () {
+    test('new settings place EasyTier last with the current layout version', () {
+      const props = AppSettingProps();
+
+      expect(props.dashboardWidgets.last, DashboardWidget.easyTier);
+      expect(props.dashboardLayoutVersion, currentDashboardLayoutVersion);
+      expect(AppSettingProps.fromJson(props.toJson()), props);
+    });
+
+    test('legacy config appends once while preserving its custom order', () {
+      final config = Config.fromJson({
+        'appSettingProps': {
+          'locale': 'zh_CN',
+          'dashboardWidgets': ['memoryInfo', 'networkSpeed', 'trafficUsage'],
+        },
+      });
+      const expected = [
+        DashboardWidget.memoryInfo,
+        DashboardWidget.networkSpeed,
+        DashboardWidget.trafficUsage,
+        DashboardWidget.easyTier,
+      ];
+
+      expect(config.appSettingProps.dashboardWidgets, expected);
+      expect(config.appSettingProps.locale, 'zh_CN');
+      expect(
+        config.appSettingProps.dashboardLayoutVersion,
+        currentDashboardLayoutVersion,
+      );
+      final restored = roundTrip(() => config.toJson(), Config.fromJson);
+      expect(restored.appSettingProps.dashboardWidgets, expected);
+    });
+
+    test('safeFromJson migrates an explicitly empty legacy layout', () {
+      final props = AppSettingProps.safeFromJson({'dashboardWidgets': []});
+
+      expect(props.dashboardWidgets, [DashboardWidget.easyTier]);
+      expect(props.dashboardLayoutVersion, currentDashboardLayoutVersion);
+      expect(AppSettingProps.safeFromJson(props.toJson()), props);
+    });
+
+    test('legacy layout already containing EasyTier is not duplicated', () {
+      final props = AppSettingProps.fromJson({
+        'dashboardLayoutVersion': 0,
+        'dashboardWidgets': ['easyTier', 'memoryInfo', 'networkSpeed'],
+      });
+
+      expect(props.dashboardWidgets, [
+        DashboardWidget.easyTier,
+        DashboardWidget.memoryInfo,
+        DashboardWidget.networkSpeed,
+      ]);
+      expect(props.dashboardLayoutVersion, currentDashboardLayoutVersion);
+    });
+
+    test('malformed layout markers preserve other settings while migrating', () {
+      for (final marker in ['broken', true, <String, Object?>{}, <Object?>[], double.nan, double.infinity, double.negativeInfinity]) {
+        final json = <String, Object?>{
+          'dashboardLayoutVersion': marker,
+          'dashboardWidgets': ['networkSpeed', 'memoryInfo'],
+          'locale': 'ja',
+          'autoLaunch': true,
+          'closeConnections': false,
+        };
+        for (final props in [AppSettingProps.fromJson(json), AppSettingProps.safeFromJson(json)]) {
+          expect(props.dashboardWidgets, [DashboardWidget.networkSpeed, DashboardWidget.memoryInfo, DashboardWidget.easyTier]);
+          expect(props.locale, 'ja');
+          expect(props.autoLaunch, true);
+          expect(props.closeConnections, false);
+          expect(props.dashboardLayoutVersion, currentDashboardLayoutVersion);
+        }
+      }
+    });
+
+    test('a future layout version preserves custom order and removed tiles', () {
+      final props = AppSettingProps.fromJson({
+        'dashboardLayoutVersion': currentDashboardLayoutVersion + 1,
+        'dashboardWidgets': ['memoryInfo', 'trafficUsage', 'networkSpeed'],
+      });
+
+      expect(props.dashboardWidgets, [DashboardWidget.memoryInfo, DashboardWidget.trafficUsage, DashboardWidget.networkSpeed]);
+      expect(props.dashboardLayoutVersion, currentDashboardLayoutVersion + 1);
+      expect(AppSettingProps.fromJson(props.toJson()), props);
+    });
+
+    test('the grid save mapping preserves a moved tile on reload', () {
+      final moved = [
+        DashboardWidget.easyTier.widget,
+        DashboardWidget.intranetIp.widget,
+        DashboardWidget.networkSpeed.widget,
+      ].map(DashboardWidget.getDashboardWidget).toList();
+      final config = Config(
+        themeProps: const ThemeProps(),
+        appSettingProps: const AppSettingProps().copyWith(
+          dashboardWidgets: moved,
+        ),
+      );
+
+      final restored = roundTrip(() => config.toJson(), Config.fromJson);
+      expect(restored.appSettingProps.dashboardWidgets, moved);
+      expect(restored.appSettingProps.dashboardWidgets.first,
+          DashboardWidget.easyTier);
+    });
+
+    test('a removed tile stays removed after saving a migrated config', () {
+      final migrated = Config.fromJson({
+        'appSettingProps': {
+          'dashboardWidgets': ['networkSpeed', 'intranetIp'],
+        },
+      });
+      final config = migrated.copyWith(
+        appSettingProps: migrated.appSettingProps.copyWith(
+          dashboardWidgets: [
+            DashboardWidget.networkSpeed,
+            DashboardWidget.intranetIp,
+          ],
+        ),
+      );
+
+      final restored = roundTrip(() => config.toJson(), Config.fromJson);
+      expect(restored.appSettingProps.dashboardWidgets, [
+        DashboardWidget.networkSpeed,
+        DashboardWidget.intranetIp,
+      ]);
+      expect(
+        AppSettingProps.safeFromJson(restored.appSettingProps.toJson())
+            .dashboardWidgets,
+        restored.appSettingProps.dashboardWidgets,
+      );
+    });
+
+    test('a marked empty layout remains empty', () {
+      final props = AppSettingProps.fromJson({
+        'dashboardLayoutVersion': currentDashboardLayoutVersion,
+        'dashboardWidgets': [],
+      });
+
+      expect(props.dashboardWidgets, isEmpty);
+      expect(AppSettingProps.fromJson(props.toJson()).dashboardWidgets, isEmpty);
+    });
+
+    test('the editable entry is available only on HarmonyOS', () {
+      final entry = DashboardWidget.easyTier;
+
+      expect(entry.platforms, [SupportPlatform.ohos]);
+      expect(entry.widget.crossAxisCellCount, 8);
+      expect(DashboardWidget.getDashboardWidget(entry.widget), entry);
+      for (final platform in SupportPlatform.values) {
+        final visible = defaultDashboardWidgets
+            .where((item) => item.platforms.contains(platform));
+        expect(visible.contains(entry), platform == SupportPlatform.ohos);
+      }
+    });
+  });
+
   group('WindowProps JSON round-trip', () {
     test('default values', () {
       const props = WindowProps();

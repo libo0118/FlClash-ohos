@@ -316,7 +316,11 @@ enum DashboardWidget {
     platforms: desktopPlatforms,
   ),
   intranetIp(GridItem(crossAxisCellCount: 4, child: IntranetIP())),
-  memoryInfo(GridItem(crossAxisCellCount: 4, child: MemoryInfo()));
+  memoryInfo(GridItem(crossAxisCellCount: 4, child: MemoryInfo())),
+  easyTier(
+    GridItem(crossAxisCellCount: 8, child: EasyTierDashboardTile()),
+    platforms: [SupportPlatform.ohos],
+  );
 
   final GridItem widget;
   final List<SupportPlatform> platforms;

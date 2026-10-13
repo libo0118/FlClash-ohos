@@ -13,7 +13,7 @@ class EasyTierPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => CommonScaffold(
-    title: 'EasyTier',
+    title: context.appLocalizations.easyTierConfiguration,
     body: ListView(children: const [EasyTierSettings()]),
   );
 }
