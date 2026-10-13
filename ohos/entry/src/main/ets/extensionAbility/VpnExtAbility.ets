@@ -9,7 +9,7 @@ import { ChunkedSender, ChunkedReader } from '../utils/Rpc'
 import AbilityConstant from '@ohos.app.ability.AbilityConstant';
 import PowerManager from '../managers/PowerManager'
 import NetworkManager from '../managers/NetworkManager'
-import EasyTierManager, { sanitizeStartupMessage, startupErrorMessage } from '../managers/EasyTierManager'
+import EasyTierManager, { EasyTierRouteSnapshot, sanitizeStartupMessage, startupErrorMessage } from '../managers/EasyTierManager'
 
 const IPV4_ADDRESS = "172.19.0.1/30"
 const IPV6_ADDRESS = "fdfe:dcba:9876::1/126"
@@ -32,6 +32,16 @@ interface DiagnosticEvent {
 interface DiagnosticMessage {
   method: string
   data: DiagnosticEvent
+}
+
+interface EasyTierRouteEvent {
+  type: string
+  data: EasyTierRouteSnapshot
+}
+
+interface EasyTierRouteMessage {
+  method: string
+  data: EasyTierRouteEvent
 }
 
 export enum RPCType{
@@ -114,6 +124,9 @@ export default class VpnExtAbility extends VpnExtensionAbility {
   private diagnosticRemote: rpc.RemoteObject | undefined
   private diagnosticBacklog: string[] = []
   private diagnosticSending: boolean = false
+  private eventListenerGeneration: number = 0
+  private latestRouteSnapshot: string | undefined
+  private deliveredRouteSnapshot: string | undefined
   private networkSecret: string = ''
 
   onCreate(want: Want): void {
@@ -125,6 +138,8 @@ export default class VpnExtAbility extends VpnExtensionAbility {
       this.enqueue(async () => { await this.stopVpn() })
     }, (level: string, message: string) => {
       this.recordDiagnostic('EasyTier', level, message)
+    }, (snapshot: EasyTierRouteSnapshot) => {
+      this.recordRoutes(snapshot)
     })
   }
 
@@ -142,6 +157,7 @@ export default class VpnExtAbility extends VpnExtensionAbility {
   }
 
   onDisconnect(want: Want): void {
+    ++this.eventListenerGeneration
     this.diagnosticRemote = undefined
     setEventListener()
   }
@@ -169,13 +185,9 @@ export default class VpnExtAbility extends VpnExtensionAbility {
   }
 
   private toVpnConfig(options: VpnOptions): vpnExtension.VpnConfig {
-    const ipv4RouteAddress = options.routeAddress.filter((it) => !it.includes(':'))
+    // Learned routes change after creation; Mihomo selects them inside the existing TUN.
+    const ipv4RouteAddress = options.easyTier?.enable ? [] : options.routeAddress.filter((it) => !it.includes(':'))
     const ipv6RouteAddress = options.routeAddress.filter((it) => it.includes(':'))
-    if (options.easyTier?.enable && ipv4RouteAddress.length > 0) {
-      for (const cidr of options.easyTier.cidrs) {
-        if (!ipv4RouteAddress.includes(cidr)) ipv4RouteAddress.push(cidr)
-      }
-    }
 
     const addresses: vpnExtension.LinkAddress[] = [this.toLinkAddress(IPV4_ADDRESS, 1)]
     const routes: vpnExtension.RouteInfo[] = ipv4RouteAddress.length > 0
@@ -281,23 +293,38 @@ export default class VpnExtAbility extends VpnExtensionAbility {
     if (this.diagnosticSending || !this.diagnosticRemote) return
     this.diagnosticSending = true
     try {
-      while (this.diagnosticRemote && this.diagnosticBacklog.length > 0) {
+      while (this.diagnosticRemote && (this.latestRouteSnapshot !== this.deliveredRouteSnapshot || this.diagnosticBacklog.length > 0)) {
         const remote = this.diagnosticRemote
-        const data = this.diagnosticBacklog[0]
+        const listenerGeneration = this.eventListenerGeneration
+        const route = this.latestRouteSnapshot !== this.deliveredRouteSnapshot ? this.latestRouteSnapshot : undefined
+        const data = route ?? this.diagnosticBacklog[0]
         try {
           await this.sender.send(remote, 0, data, null)
         } catch (logError) {
-          if (this.diagnosticRemote === remote) this.diagnosticRemote = undefined
+          if (this.diagnosticRemote === remote && listenerGeneration === this.eventListenerGeneration) {
+            this.diagnosticRemote = undefined
+          }
           break
         }
-        if (this.diagnosticBacklog[0] === data) this.diagnosticBacklog.shift()
+        if (route !== undefined) {
+          if (listenerGeneration === this.eventListenerGeneration) {
+            this.deliveredRouteSnapshot = route
+          }
+        } else if (this.diagnosticBacklog[0] === data) this.diagnosticBacklog.shift()
       }
     } finally {
       this.diagnosticSending = false
-      if (this.diagnosticRemote && this.diagnosticBacklog.length > 0) {
+      if (this.diagnosticRemote && (this.latestRouteSnapshot !== this.deliveredRouteSnapshot || this.diagnosticBacklog.length > 0)) {
         this.flushDiagnosticLogs().catch(() => {})
       }
     }
+  }
+
+  private recordRoutes(snapshot: EasyTierRouteSnapshot): void {
+    const event: EasyTierRouteEvent = { type: 'easyTierRoutes', data: snapshot }
+    const envelope: EasyTierRouteMessage = { method: 'message', data: event }
+    this.latestRouteSnapshot = JSON.stringify(envelope)
+    this.flushDiagnosticLogs().catch(() => {})
   }
 
   private sendResult(remote: rpc.RemoteObject, runTime: number, error: string = ''): void {
@@ -314,7 +341,9 @@ export default class VpnExtAbility extends VpnExtensionAbility {
   }
 
   handleSetEventListener(remote: rpc.RemoteObject): void {
+    ++this.eventListenerGeneration
     this.diagnosticRemote = remote
+    this.deliveredRouteSnapshot = undefined
     setEventListener((callbackData: string) => { this.sendCallback(remote, callbackData) })
     this.flushDiagnosticLogs().catch(() => {})
   }
@@ -404,7 +433,7 @@ export default class VpnExtAbility extends VpnExtensionAbility {
           if (vpnOptions.easyTier?.enable) {
             stage = 'EasyTier 启动'
             this.recordDiagnostic('VPN', 'info', stage)
-            await this.easyTier?.start(vpnOptions.easyTier, connection)
+            await this.easyTier?.start(vpnOptions.easyTier, connection, vpnOptions.easyTierRouteConfigTag ?? '')
           }
           stage = 'VPN 生成连接标识'
           this.recordDiagnostic('VPN', 'info', stage)

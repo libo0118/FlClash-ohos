@@ -33,6 +33,7 @@ export class VpnOptions {
   stack: string = ""
   routeAddress: string[] = []
   easyTier: EasyTierProps = new EasyTierProps()
+  easyTierRouteConfigTag: string = ''
 
   constructor() {
   }

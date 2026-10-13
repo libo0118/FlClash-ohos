@@ -46,6 +46,7 @@ const native = {}
 const consoleLines = []
 const state = { runTime: 0, runState: 'stop', state: undefined }
 let coreListener
+let nextRouteSession = 0
 const context = vm.createContext({
   easyTier: native,
   rpc: { RemoteObject: class {}, MessageOption: class { setAsync() {} }, MessageSequence: { create: () => new Sequence() } },
@@ -53,7 +54,7 @@ const context = vm.createContext({
   VpnOptions: class {},
   globalState: state, RunState: { stop: 'stop', start: 'start', pending: 'pending' },
   deviceInfo: { sdkApiVersion: 23 },
-  util: { TextEncoder: { create: () => ({ encodeInto: (text) => new TextEncoder().encode(text) }) }, TextDecoder: { create: () => ({ decodeToString: (bytes) => new TextDecoder().decode(bytes) }) } },
+  util: { generateRandomUUID: () => `test-session-${++nextRouteSession}`, TextEncoder: { create: () => ({ encodeInto: (text) => new TextEncoder().encode(text) }) }, TextDecoder: { create: () => ({ decodeToString: (bytes) => new TextDecoder().decode(bytes) }) } },
   Date: class extends Date { constructor(value = clock.now) { super(value) } static now() { return clock.now } },
   console: { error: (line) => consoleLines.push(line) },
   setTimeout: (callback, delay) => schedule(callback, delay), clearTimeout: (id) => clock.timers.delete(id),
@@ -103,8 +104,8 @@ function resultRecorder() {
   const calls = []
   return { calls, success: (value) => calls.push({ value }), error: (code, message) => calls.push({ code, message }) }
 }
-function manager(logs = [], onFailure = () => {}) {
-  return new subject.EasyTierManager('/private/test', onFailure, (level, message) => logs.push({ level, message }))
+function manager(logs = [], onFailure = () => {}, routes = []) {
+  return new subject.EasyTierManager('/private/test', onFailure, (level, message) => logs.push({ level, message }), (snapshot) => routes.push(JSON.parse(JSON.stringify(snapshot))))
 }
 function remoteRecorder() {
   const calls = []
@@ -125,6 +126,20 @@ function validateEnvelope(raw) {
   noSecret(row.Payload)
   assert.ok(row.Payload.length <= 2400)
   return row
+}
+function logRows(calls) { return calls.filter((raw) => JSON.parse(raw).data.type === 'log').map(validateEnvelope) }
+function routeEvents(calls) {
+  return calls.map((raw) => JSON.parse(raw)).filter((envelope) => envelope.data.type === 'easyTierRoutes').map((envelope) => {
+    assert.equal(envelope.method, 'message')
+    const snapshot = envelope.data.data
+    assert.equal(typeof snapshot.sessionId, 'string')
+    assert.ok(snapshot.sessionId.length > 0)
+    assert.ok(Number.isInteger(snapshot.revision) && snapshot.revision > 0)
+    assert.ok(['starting', 'ready', 'stopped'].includes(snapshot.status))
+    assert.ok(Array.isArray(snapshot.cidrs) && snapshot.cidrs.every((cidr) => typeof cidr === 'string'))
+    noSecret(JSON.stringify(snapshot))
+    return snapshot
+  })
 }
 
 async function main() {
@@ -206,7 +221,7 @@ async function main() {
   liveVpn.handleSetEventListener(liveRemote.remote)
   const liveManager = new subject.EasyTierManager('/private/test', () => {}, (level, message) => {
     liveVpn.recordDiagnostic('EasyTier', level, message)
-  })
+  }, (snapshot) => liveVpn.recordRoutes(snapshot))
   let releaseProtection
   native.nextSocketProtectionRequest = () => new Promise((resolve) => { releaseProtection = resolve })
   native.failSocketProtection = () => releaseProtection?.(null)
@@ -219,30 +234,30 @@ async function main() {
     assert.equal(debug, false)
   }
   native.drainLogLines = () => ring.splice(0)
-  const instance = { instanceId: '9d9ccb7f-71e5-4cb8-9fb1-a18d0845d6a0', running: true, errorMessage: null, myNodeInfo: { virtualIpv4: null }, peers: [] }
+  const instance = { instanceId: '9d9ccb7f-71e5-4cb8-9fb1-a18d0845d6a0', running: true, errorMessage: null, myNodeInfo: { virtualIpv4: null, virtualIpv4Cidr: null, peerId: null }, peers: [], routes: [] }
   native.collectRuntimeStateJson = () => JSON.stringify({ instances: [instance] })
   let finished = false
   const pendingStart = liveManager.start(props, {}).then(() => { finished = true }, (failure) => { finished = true; return failure })
   await settle()
   assert.equal(finished, false)
-  assert.ok(liveRemote.calls.map(validateEnvelope).some((row) => row.Payload.includes('EasyTier 等待节点连接')))
+  assert.ok(logRows(liveRemote.calls).some((row) => row.Payload.includes('EasyTier 等待节点连接')))
   assert.ok(!liveRemote.calls.some((raw) => raw.includes('stale session')))
   assert.equal(intervalCount(), 1)
   // Formats/levels come from easytier-ohrs native_log.rs, lib.rs macros and log_manager.rs::format_line.
   ring.push(`4[Rust:node] connected ${secret}`, `6[Rust:peer] retry ${escaped}`, `5[Rust:peer] failed ${secret}`, '3[Rust:debug] detail', '2[Rust:trace] detail', `4[RustOhrs] [Rust] initialized ${escaped}`, `5[RustOhrs] [Rust] start_kernel failed ${secret}`)
   await advance(1000)
-  const nativeRows = liveRemote.calls.map(validateEnvelope).filter((row) => row.Payload.includes('[Rust'))
+  const nativeRows = logRows(liveRemote.calls).filter((row) => row.Payload.includes('[Rust'))
   assert.deepEqual(nativeRows.map((row) => row.LogLevel), ['info', 'warning', 'error', 'debug', 'debug', 'info', 'error'])
   assert.equal(ring.length, 0)
   await advance(4000)
-  assert.equal(liveRemote.calls.map(validateEnvelope).filter((row) => row.Payload.includes('连接状态')).length, 2)
+  assert.equal(logRows(liveRemote.calls).filter((row) => row.Payload.includes('连接状态')).length, 2)
   instance.errorMessage = `peer rejected ${escaped}`
   await advance(250)
   const liveFailure = await pendingStart
   assert.ok(liveFailure.message.includes('[Rust:peer] failed'))
   noSecret(liveFailure.message)
   assert.equal(intervalCount(), 0)
-  assert.ok(liveRemote.calls.map(validateEnvelope).some((row) => row.Payload.includes('清理完成')))
+  assert.ok(logRows(liveRemote.calls).some((row) => row.Payload.includes('清理完成')))
   const logCountAfterCleanup = liveRemote.calls.length
   await advance(1000)
   assert.equal(liveRemote.calls.length, logCountAfterCleanup)
@@ -251,7 +266,7 @@ async function main() {
   resetNative()
   native.nextSocketProtectionRequest = () => new Promise((resolve) => { releaseProtection = resolve })
   native.failSocketProtection = () => releaseProtection?.(null)
-  const ready = { ...instance, errorMessage: null, myNodeInfo: { virtualIpv4: '10.144.144.2' }, peers: [{ conns: [{ isClosed: false }] }] }
+  const ready = { ...instance, errorMessage: null, myNodeInfo: { virtualIpv4: '10.144.144.2', virtualIpv4Cidr: '10.144.144.2/24', peerId: 23 }, peers: [{ conns: [{ isClosed: false }] }] }
   native.collectRuntimeStateJson = () => JSON.stringify({ instances: [ready] })
   const successRows = []
   const successManager = manager(successRows)
@@ -268,6 +283,135 @@ async function main() {
   assert.equal(intervalCount(), 0)
   await advance(250)
   assert.match((await canceledStart).message, /启动已取消/)
+
+  // Cancellation during the initial cleanup cannot launch a new session after that cleanup finishes.
+  resetNative()
+  const initialStopRoutes = []
+  const initialStopManager = manager([], () => {}, initialStopRoutes)
+  let releaseInitialStop
+  initialStopManager.pump = new Promise((resolve) => { releaseInitialStop = resolve })
+  let nativeStarts = 0
+  native.runEmbeddedNetworkInstance = () => { ++nativeStarts; return true }
+  const initialStopStart = initialStopManager.start(props, {}).catch((failure) => failure)
+  await settle()
+  initialStopManager.cancel()
+  releaseInitialStop()
+  assert.match((await initialStopStart).message, /启动已取消/)
+  assert.equal(nativeStarts, 0)
+  assert.equal(initialStopRoutes.length, 0, 'a canceled cleanup must not publish a starting or ready session')
+  assert.equal(intervalCount(), 0)
+
+  // Publish full live route tables (including relayed routes), without restarting the VPN or awaiting Flutter.
+  resetNative()
+  native.nextSocketProtectionRequest = () => new Promise((resolve) => { releaseProtection = resolve })
+  native.failSocketProtection = () => releaseProtection?.(null)
+  const routeVpn = new subject.VpnExtAbility()
+  const routeRemote = remoteRecorder()
+  routeVpn.handleSetEventListener(routeRemote.remote)
+  const routes = []
+  let routeStartFinished = false
+  const routeManager = new subject.EasyTierManager('/private/test', () => {}, (level, message) => {
+    routeVpn.recordDiagnostic('EasyTier', level, message)
+  }, (snapshot) => {
+    if (snapshot.status === 'ready' && routes.length === 1) assert.equal(routeStartFinished, false)
+    routes.push(JSON.parse(JSON.stringify(snapshot)))
+    routeVpn.recordRoutes(snapshot)
+  })
+  const routeInstance = {
+    ...ready,
+    myNodeInfo: { virtualIpv4: '10.126.126.2', virtualIpv4Cidr: '10.126.126.2/24', peerId: 23 },
+    routes: [
+      { ipv4: '10.126.126.7', ipv4Cidr: '10.126.126.7/32', proxyCidrs: ['192.168.6.0/24', '2001:db8::/64'] },
+      { ipv4: '10.126.126.8', ipv4Cidr: null, proxyCidrs: ['192.168.6.0/24'], nextHopPeerId: 7, cost: 2 },
+    ],
+  }
+  let routeQueryError = false
+  native.collectRuntimeStateJson = () => {
+    if (routeQueryError) throw error('transient query failure', 1)
+    return JSON.stringify({ instances: [routeInstance] })
+  }
+  await routeManager.start(props, {}, 'test-config-tag').then(() => { routeStartFinished = true })
+  await settle()
+  assert.deepEqual(routes.map(({ status, revision }) => [status, revision]), [['starting', 1], ['ready', 2]])
+  assert.ok(routes.every(({ configTag }) => configTag === 'test-config-tag'))
+  assert.deepEqual(routes[1].cidrs, ['10.126.126.2/24', '10.126.126.7/32', '10.126.126.8/32', '192.168.6.0/24'])
+  assert.deepEqual(routeEvents(routeRemote.calls), [routes[1]], 'full snapshots may coalesce while an earlier log RPC is in flight')
+  assert.equal(intervalCount(), 1)
+  await advance(4000)
+  assert.equal(routes.length, 2, 'unchanged route table must not emit')
+  routeQueryError = true
+  await advance(2000)
+  assert.equal(routes.length, 2, 'query failure must retain the previous complete snapshot')
+  routeQueryError = false
+  routeInstance.routes[0].proxyCidrs = ['192.168.7.0/24']
+  routeInstance.routes[1].proxyCidrs = []
+  await advance(2000)
+  assert.equal(routes.length, 3)
+  assert.deepEqual(routes[2].cidrs, ['10.126.126.2/24', '10.126.126.7/32', '10.126.126.8/32', '192.168.7.0/24'])
+  assert.equal(routes[2].revision, 3)
+  routeInstance.myNodeInfo.peerId = null
+  routeInstance.routes[0].proxyCidrs = ['192.168.99.0/24']
+  await advance(2000)
+  assert.equal(routes.length, 3, 'configured fallback with fabricated open peers must not be authoritative')
+  routeInstance.myNodeInfo.peerId = 23
+  routeInstance.routes[0].proxyCidrs = Array(4097).fill('192.168.99.0/24')
+  await advance(2000)
+  assert.equal(routes.length, 3, 'oversized snapshot must be rejected rather than partially withdrawn')
+  routeInstance.routes[0].proxyCidrs = ['192.168.7.0/24']
+
+  // The latest route snapshot survives log backlog eviction and replays to a newly attached listener.
+  routeVpn.onDisconnect({})
+  for (let i = 0; i < 120; ++i) routeVpn.recordDiagnostic('VPN', 'info', `route replay log ${i}`)
+  const replayRemote = remoteRecorder()
+  routeVpn.handleSetEventListener(replayRemote.remote)
+  await settle()
+  assert.deepEqual(routeEvents(replayRemote.calls), [routes[2]])
+  assert.equal(logRows(replayRemote.calls).length, 100)
+  assert.equal(JSON.parse(replayRemote.calls[0]).data.type, 'easyTierRoutes')
+  const oldTimer = [...clock.timers.values()].find((timer) => timer.interval).callback
+  routeManager.cancel()
+  await routeManager.stop()
+  assert.equal(routes.at(-1).status, 'stopped')
+  assert.equal(routes.filter(({ status }) => status === 'stopped').length, 1)
+  const oldSession = routes[0].sessionId
+  const beforeRestart = routes.length
+  await routeManager.start(props, {})
+  assert.deepEqual(routes.slice(beforeRestart).map(({ status, revision }) => [status, revision]), [['starting', 1], ['ready', 2]])
+  assert.notEqual(routes.at(-1).sessionId, oldSession)
+  oldTimer()
+  assert.equal(intervalCount(), 1, 'a queued timer from the old session must not clear the new timer')
+  assert.equal(routes.length, beforeRestart + 2, 'old callbacks cannot publish ready in the new session')
+  await routeManager.stop()
+  await settle()
+  assert.equal(intervalCount(), 0)
+  assert.equal(routes.at(-1).status, 'stopped')
+  const deliveredRoutes = routeEvents(replayRemote.calls)
+  assert.deepEqual(deliveredRoutes.at(-1), routes.at(-1))
+  const deliveredRevisions = new Map()
+  for (const snapshot of deliveredRoutes) {
+    assert.ok(snapshot.revision > (deliveredRevisions.get(snapshot.sessionId) ?? 0), 'late sends must not restore an older revision')
+    deliveredRevisions.set(snapshot.sessionId, snapshot.revision)
+  }
+
+  // A late RPC completion cannot acknowledge a newer session or a newly attached listener.
+  const blockedVpn = new subject.VpnExtAbility()
+  const blocked = remoteRecorder()
+  let releaseSend
+  const pausedRemote = { sendMessageRequest: async (code, packet) => {
+    await blocked.remote.sendMessageRequest(code, packet)
+    await new Promise((resolve) => { releaseSend = resolve })
+  } }
+  blockedVpn.handleSetEventListener(pausedRemote)
+  blockedVpn.recordRoutes({ sessionId: 'old', revision: 1, status: 'ready', cidrs: ['10.1.0.0/24'] })
+  await settle()
+  blockedVpn.recordRoutes({ sessionId: 'old', revision: 2, status: 'stopped', cidrs: [] })
+  blockedVpn.recordRoutes({ sessionId: 'new', revision: 1, status: 'starting', cidrs: [] })
+  const replacementRemote = remoteRecorder()
+  blockedVpn.handleSetEventListener(replacementRemote.remote)
+  releaseSend()
+  await settle()
+  assert.deepEqual(routeEvents(blocked.calls).map(({ sessionId }) => sessionId), ['old'])
+  assert.deepEqual(routeEvents(replacementRemote.calls), [{ sessionId: 'new', revision: 1, status: 'starting', cidrs: [] }])
 
   // Missing listeners retain a bounded backlog; the actual RPC chunk reader receives its ABI intact.
   const queuedVpn = new subject.VpnExtAbility()
@@ -308,6 +452,12 @@ async function main() {
   vpn.handleSetEventListener(vpnRemote.remote)
   vpn.vpnConnection = { destroy: async () => {}, create: async () => { throw error(`create ${secret}`, 2200003) } }
   const options = { enable: true, port: 7890, routeAddress: [], ipv6: false, allowBypass: false, accessControlProps: { enable: false }, easyTier: props }
+  const customRouteAddress = ['192.168.50.0/24', '2001:db8::/64']
+  const customRouteOptions = { ...options, routeAddress: customRouteAddress, ipv6: true }
+  const toCidrs = (config) => Array.from(config.routes, ({ destination }) => `${destination.address.address}/${destination.prefixLength}`)
+  assert.deepEqual(toCidrs(vpn.toVpnConfig(customRouteOptions)), ['0.0.0.0/0', '2001:db8::/64'], 'learned IPv4 routes must always reach the existing TUN')
+  assert.deepEqual(toCidrs(vpn.toVpnConfig({ ...customRouteOptions, easyTier: { ...props, enable: false } })), customRouteAddress, 'non-EasyTier split routes must remain unchanged')
+  assert.deepEqual(customRouteAddress, ['192.168.50.0/24', '2001:db8::/64'], 'VPN config must not mutate supplied route addresses')
   state.state.vpnOptions = options
   const plugin = new subject.ServicePlugin({ handleStartService: (_options, time, stub) => {
     vpn.handleStartService(options, time, { sendMessageRequest: async (_code, packet) => {
@@ -360,6 +510,6 @@ async function main() {
   assert.equal(state.runTime, 0)
   assert.equal(intervalCount(), 0)
   assert.equal(clock.timers.size, 0)
-  console.log('PASS: live startup/native logs, pending visibility, severity ABI, bounded RPC backlog, secret redaction, retained failure tail, timer cleanup, legacy callbacks and RPC races')
+  console.log('PASS: live startup/native logs, route snapshot ABI and readiness, relayed route add/remove, transient/oversized/fallback retention, replay, initial-cleanup cancellation, full IPv4 EasyTier TUN and non-EasyTier split routes, rapid restart/timer ordering, bounded RPC backlog, redaction and legacy callbacks')
 }
 main().catch((failure) => { console.error(failure); process.exitCode = 1 })

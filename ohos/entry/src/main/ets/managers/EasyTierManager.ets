@@ -1,10 +1,23 @@
 import { vpnExtension } from '@kit.NetworkKit'
 import { BusinessError } from '@kit.BasicServicesKit'
+import { util } from '@kit.ArkTS'
 import easyTier from 'easytier-ohrs'
 import { EasyTierProps } from '../models/State'
 
 const INSTANCE_ID = '9d9ccb7f-71e5-4cb8-9fb1-a18d0845d6a0'
 const SOCKS_PORT = 17890
+const MAX_RUNTIME_JSON_LENGTH = 2 * 1024 * 1024
+const MAX_ROUTE_CANDIDATES = 4096
+
+export type EasyTierRouteStatus = 'starting' | 'ready' | 'stopped'
+
+export interface EasyTierRouteSnapshot {
+  sessionId: string
+  configTag: string
+  revision: number
+  status: EasyTierRouteStatus
+  cidrs: string[]
+}
 
 export function sanitizeStartupMessage(message: string, networkSecret: string): string {
   if (!networkSecret) return message
@@ -41,6 +54,14 @@ interface RuntimePeer {
 
 interface RuntimeNode {
   virtualIpv4: string | null
+  virtualIpv4Cidr: string | null
+  peerId: number | null
+}
+
+interface RuntimeRoute {
+  ipv4: string | null
+  ipv4Cidr: string | null
+  proxyCidrs: string[]
 }
 
 interface RuntimeInstance {
@@ -49,6 +70,7 @@ interface RuntimeInstance {
   errorMessage: string | null
   myNodeInfo: RuntimeNode | null
   peers: RuntimePeer[]
+  routes: RuntimeRoute[]
 }
 
 interface RuntimeState {
@@ -69,11 +91,22 @@ export default class EasyTierManager {
   private recentLogs: string[] = []
   private logReadFailed: boolean = false
   private failureLogged: boolean = false
+  private onRoutes: (snapshot: EasyTierRouteSnapshot) => void
+  private routeSessionId: string = ''
+  private routeConfigTag: string = ''
+  private routeRevision: number = 0
+  private routeStatus: EasyTierRouteStatus | undefined
+  private routeCidrs: string[] = []
+  private routesReady: boolean = false
+  private nextRouteRead: number = 0
+  private routeReadFailed: boolean = false
 
-  constructor(configRoot: string, onFailure: () => void, onLog: (level: string, message: string) => void) {
+  constructor(configRoot: string, onFailure: () => void, onLog: (level: string, message: string) => void,
+    onRoutes: (snapshot: EasyTierRouteSnapshot) => void) {
     this.configRoot = configRoot
     this.onFailure = onFailure
     this.onLog = onLog
+    this.onRoutes = onRoutes
   }
 
   private log(level: string, message: string): void {
@@ -123,18 +156,124 @@ export default class EasyTierManager {
   private startLogTimer(generation: number): void {
     this.stopLogTimer()
     this.logTimer = setInterval(() => {
-      if (this.active && generation === this.generation) this.drainNativeLogs()
-      else this.stopLogTimer()
+      if (generation !== this.generation) return
+      if (!this.active) {
+        this.stopLogTimer()
+        return
+      }
+      this.drainNativeLogs()
+      if (this.routesReady && Date.now() >= this.nextRouteRead) {
+        this.nextRouteRead = Date.now() + 2000
+        this.refreshRoutes(generation)
+      }
     }, 1000)
   }
 
-  async start(props: EasyTierProps, connection: vpnExtension.VpnConnection): Promise<void> {
+  private readRuntimeInstance(): RuntimeInstance | undefined {
+    const raw = easyTier.collectRuntimeStateJson()
+    if (typeof raw !== 'string' || raw.length > MAX_RUNTIME_JSON_LENGTH) {
+      throw new Error('运行状态超出路由同步限制')
+    }
+    const state = JSON.parse(raw) as RuntimeState
+    if (!Array.isArray(state.instances) || state.instances.length > MAX_ROUTE_CANDIDATES) {
+      throw new Error('运行状态实例列表无效')
+    }
+    return state.instances.find((item) => item.instanceId === INSTANCE_ID)
+  }
+
+  private hasLivePeer(instance: RuntimeInstance): boolean {
+    // 配置快照也会伪造连接；只有实时节点信息具有 peerId。
+    return instance.running && !!instance.myNodeInfo?.virtualIpv4 &&
+      typeof instance.myNodeInfo?.peerId === 'number' && Number.isFinite(instance.myNodeInfo.peerId) &&
+      instance.myNodeInfo.peerId >= 0 && Array.isArray(instance.peers) &&
+      instance.peers.some((peer) => Array.isArray(peer.conns) && peer.conns.some((conn) => !conn.isClosed))
+  }
+
+  private readRouteCidrs(instance: RuntimeInstance): string[] {
+    if (!Array.isArray(instance.routes) || instance.routes.length > MAX_ROUTE_CANDIDATES) {
+      throw new Error('路由列表超出同步限制')
+    }
+    const candidates: string[] = []
+    let candidateCount = 0
+    const add = (value: string | null | undefined, addressOnly: boolean = false): void => {
+      if (value === null || value === undefined || value === '') return
+      if (++candidateCount > MAX_ROUTE_CANDIDATES) throw new Error('路由数量超出同步限制')
+      if (typeof value !== 'string' || value.length > 64) throw new Error('路由字段无效')
+      const cidr = addressOnly ? `${value}/32` : value
+      if (!/^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}$/.test(cidr)) return
+      candidates.push(cidr)
+    }
+    const node = instance.myNodeInfo
+    add(node?.virtualIpv4Cidr ?? node?.virtualIpv4, !node?.virtualIpv4Cidr)
+    for (const route of instance.routes) {
+      add(route.ipv4Cidr ?? route.ipv4, !route.ipv4Cidr)
+      if (!Array.isArray(route.proxyCidrs) || route.proxyCidrs.length > MAX_ROUTE_CANDIDATES) {
+        throw new Error('子网路由列表超出同步限制')
+      }
+      for (const cidr of route.proxyCidrs) add(cidr)
+    }
+    return Array.from(new Set<string>(candidates)).sort()
+  }
+
+  private publishRoutes(status: EasyTierRouteStatus, cidrs: string[]): void {
+    if (!this.routeSessionId || (status === this.routeStatus && cidrs.join('\n') === this.routeCidrs.join('\n'))) return
+    this.routeStatus = status
+    this.routeCidrs = cidrs.slice()
+    const snapshot: EasyTierRouteSnapshot = {
+      sessionId: this.routeSessionId,
+      configTag: this.routeConfigTag,
+      revision: ++this.routeRevision,
+      status,
+      cidrs: cidrs.slice(),
+    }
+    try {
+      this.onRoutes(snapshot)
+    } catch (routeError) {
+      this.log('warning', '路由事件传输失败，保留最新快照')
+    }
+    if (status === 'ready') this.log('info', `自动路由快照已更新，网段数=${cidrs.length}`)
+  }
+
+  private updateRoutes(instance: RuntimeInstance, generation: number): void {
+    if (!this.active || generation !== this.generation || !this.hasLivePeer(instance) || instance.errorMessage) return
+    try {
+      const cidrs = this.readRouteCidrs(instance)
+      if (this.active && generation === this.generation) this.publishRoutes('ready', cidrs)
+      this.routeReadFailed = false
+    } catch (routeError) {
+      if (!this.routeReadFailed) this.log('warning', '读取自动路由快照失败，保留已有网段')
+      this.routeReadFailed = true
+    }
+  }
+
+  private refreshRoutes(generation: number): void {
+    try {
+      const instance = this.readRuntimeInstance()
+      if (instance) this.updateRoutes(instance, generation)
+    } catch (routeError) {
+      if (!this.routeReadFailed) this.log('warning', '读取自动路由快照失败，保留已有网段')
+      this.routeReadFailed = true
+    }
+  }
+
+  async start(props: EasyTierProps, connection: vpnExtension.VpnConnection, configTag: string = ''): Promise<void> {
     let stage = 'EasyTier 清理上次实例'
     try {
       this.log('info', stage)
-      await this.stop()
+      const stopping = this.stop()
+      const stopGeneration = this.generation
+      await stopping
+      if (stopGeneration !== this.generation) throw new Error('EasyTier 启动已取消')
       if (!props.enable) return
       this.networkSecret = props.networkSecret
+      this.routeSessionId = util.generateRandomUUID(true)
+      this.routeConfigTag = configTag
+      this.routeRevision = 0
+      this.routeStatus = undefined
+      this.routeCidrs = []
+      this.routesReady = false
+      this.routeReadFailed = false
+      this.publishRoutes('starting', [])
       this.failure = undefined
       this.failureLogged = false
       this.logReadFailed = false
@@ -202,6 +341,8 @@ export default class EasyTierManager {
   cancel(): void {
     this.stopLogTimer()
     this.active = false
+    this.routesReady = false
+    this.publishRoutes('stopped', [])
     ++this.generation
     if (this.pump || this.nativeStarted) easyTier.failSocketProtection()
   }
@@ -276,8 +417,7 @@ export default class EasyTierManager {
     const deadline = Date.now() + 30000
     let nextProgress = 0
     while (this.active && generation === this.generation) {
-      const state = JSON.parse(easyTier.collectRuntimeStateJson()) as RuntimeState
-      const instance = state.instances.find((item) => item.instanceId === INSTANCE_ID)
+      const instance = this.readRuntimeInstance()
       if (Date.now() >= nextProgress) {
         const peers = instance?.peers?.filter((peer) => peer.conns.some((conn) => !conn.isClosed)).length ?? 0
         this.log('info', `连接状态：running=${instance?.running ?? false}，已连接节点=${peers}，虚拟 IPv4=${instance?.myNodeInfo?.virtualIpv4 ?? '未分配'}`)
@@ -285,8 +425,10 @@ export default class EasyTierManager {
         nextProgress = Date.now() + 5000
       }
       if (instance?.errorMessage) throw new Error(instance.errorMessage)
-      if (instance?.running && instance.myNodeInfo?.virtualIpv4 &&
-        instance.peers.some((peer) => peer.conns.some((conn) => !conn.isClosed))) {
+      if (instance && this.hasLivePeer(instance)) {
+        this.routesReady = true
+        this.nextRouteRead = Date.now() + 2000
+        this.updateRoutes(instance, generation)
         return
       }
       if (Date.now() >= deadline) throw new Error('节点连接超时（30 秒）')

@@ -38,7 +38,13 @@ on Mobile:
 
 ### OpenHarmony EasyTier integration
 
-One FlClash app and one system VPN combine the existing proxy subscription with embedded EasyTier TCP/UDP access to selected intranet IPv4 networks. See [configuration and build notes](README_EASYTIER.md).
+One FlClash app and one system VPN combine the existing proxy subscription with embedded EasyTier TCP/UDP access. EasyTier automatically supplies its virtual IPv4 networks and subnet routes advertised by remote peers, including relayed peers; FlClash updates the routing rules while the VPN keeps running.
+
+Enter the EasyTier network name, secret and peer URLs in the existing EasyTier configuration page. **Supplemental IPv4 CIDRs are optional**: leave them empty to use learned routes, or retain/add explicit networks. The page shows the latest learned networks and synchronization status. A remote LAN must still be published by an EasyTier peer; learning routes cannot expose a LAN that the peer has not advertised.
+
+Only RFC1918 private IPv4 networks and `100.64.0.0/10` are accepted. Default/public routes, IPv6, loopback, and networks overlapping the VPN's `172.19.0.0/30` are excluded. Withdrawn learned networks receive `REJECT` rules so they do not fall through to the public proxy; rediscovered or manually configured networks use EasyTier first. This integration supports TCP/UDP, not ICMP ping. A synchronized route snapshot does not verify that a particular intranet service is reachable.
+
+Build `0.8.94+2026101303` logs the marker `ET-LOG-20261013-3`. Enable **Tools → Application → Log capture**, reproduce the issue, then open **Tools → More → Logs** and use the save icon to export. Startup, VPN and EasyTier diagnostics use the existing log page; the latest 1000 records are held in memory and cleared when the app restarts. See [configuration and build notes](README_EASYTIER.md).
 
 ### Linux
 

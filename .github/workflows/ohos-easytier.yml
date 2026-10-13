@@ -37,7 +37,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: easytier-embedded-har
-          run-id: 38234285091
+          run-id: 38339784161
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: easytier-contrib/easytier-ohrs
       - name: Verify the reused library revision
@@ -160,6 +160,7 @@ jobs:
           dart run intl_utils:generate
           dart run build_runner build --delete-conflicting-outputs
           dart format lib/common/easytier.dart lib/common/task.dart lib/core/lib.dart lib/models/config.dart lib/models/core.dart lib/models/state.dart lib/providers/action.dart lib/providers/app.dart lib/providers/state.dart test/providers/startup_logs_test.dart lib/views/config/easytier.dart lib/views/config/network.dart lib/views/dashboard/widgets/outbound_mode.dart test/common/easytier_test.dart
+          dart format lib/common/profile_update_queue.dart lib/providers/easytier.dart lib/core/event.dart lib/enum/enum.dart lib/manager/core_manager.dart test/common/profile_update_queue_test.dart test/core/easytier_event_test.dart test/providers/easytier_routes_test.dart
       - name: Analyze
         run: flutter analyze --no-fatal-infos
       - name: Test

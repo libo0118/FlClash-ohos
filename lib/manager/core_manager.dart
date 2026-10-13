@@ -1,15 +1,18 @@
 import 'dart:async';
 
 import 'package:fl_clash/common/common.dart';
+import 'package:fl_clash/common/easytier.dart';
 import 'package:fl_clash/core/core.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/action.dart';
 import 'package:fl_clash/providers/app.dart';
 import 'package:fl_clash/providers/config.dart';
+import 'package:fl_clash/providers/easytier.dart';
 import 'package:fl_clash/providers/state.dart';
 import 'package:fl_clash/state.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class CoreManager extends ConsumerStatefulWidget {
@@ -32,6 +35,18 @@ class _CoreContainerState extends ConsumerState<CoreManager>
   void initState() {
     super.initState();
     coreEventManager.addListener(this);
+    ref.listenManual(appSettingProvider.select((state) => state.easyTier), (
+      prev,
+      next,
+    ) {
+      if (system.isOhos && prev != null &&
+          (!next.enable ||
+              prev.networkName != next.networkName ||
+              prev.networkSecret != next.networkSecret ||
+              !listEquals(prev.peerUrls, next.peerUrls))) {
+        ref.read(easyTierRoutesProvider.notifier).reset();
+      }
+    });
     ref.listenManual(currentProfileIdProvider, (prev, next) {
       if (prev != next) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -79,6 +94,24 @@ class _CoreContainerState extends ConsumerState<CoreManager>
       globalState.showNotifier(log.payload);
     }
     super.onLog(log);
+  }
+
+  @override
+  void onEasyTierRoutes(Map<String, dynamic> snapshot) {
+    final props = ref.read(appSettingProvider).easyTier;
+    if (!system.isOhos || !props.enable) return;
+    if (ref.read(easyTierRoutesProvider.notifier).applySnapshot(
+      snapshot,
+      expectedConfigTag: easyTierRouteConfigTag(props),
+    )) {
+      final routes = ref.read(easyTierRoutesProvider);
+      ref.read(logsProvider.notifier).add(Log.app(
+        '[EasyTier] route rules refresh requested; '
+        'active=${routes.activeCidrs.join(",")}; '
+        'blocked=${routes.blockedCidrs.join(",")}',
+      ));
+      ref.read(setupActionProvider.notifier).refreshEasyTierRoutes();
+    }
   }
 
   @override

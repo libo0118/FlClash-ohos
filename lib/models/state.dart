@@ -347,6 +347,8 @@ abstract class MakeRealProfileState with _$MakeRealProfileState {
     required List<Rule> addedRules,
     required String defaultUA,
     @Default(EasyTierProps()) EasyTierProps easyTier,
+    @Default([]) List<String> easyTierLearnedCidrs,
+    @Default([]) List<String> easyTierBlockedCidrs,
   }) = _MakeRealProfileState;
 }
 

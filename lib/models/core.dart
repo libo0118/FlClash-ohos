@@ -53,6 +53,7 @@ abstract class VpnOptions with _$VpnOptions {
     required String stack,
     @Default([]) List<String> routeAddress,
     @Default(EasyTierProps()) EasyTierProps easyTier,
+    @Default('') String easyTierRouteConfigTag,
   }) = _VpnOptions;
 
   factory VpnOptions.fromJson(Map<String, Object?> json) =>

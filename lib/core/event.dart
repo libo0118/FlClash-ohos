@@ -15,6 +15,8 @@ abstract mixin class CoreEventListener {
 
   void onCrash(String message) {}
 
+  void onEasyTierRoutes(Map<String, dynamic> snapshot) {}
+
   void onGeoUpdate(
     String geoType,
     bool updating,
@@ -44,6 +46,11 @@ class CoreEventManager {
             break;
           case CoreEventType.crash:
             listener.onCrash(event.data);
+            break;
+          case CoreEventType.easyTierRoutes:
+            if (event.data is Map<String, dynamic>) {
+              listener.onEasyTierRoutes(event.data);
+            }
             break;
           case CoreEventType.geoUpdate:
             final data = event.data as Map<String, dynamic>;

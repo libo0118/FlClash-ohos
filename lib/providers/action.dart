@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/common/easytier.dart';
+import 'package:fl_clash/common/profile_update_queue.dart';
 import 'package:fl_clash/core/core.dart';
 import 'package:fl_clash/database/database.dart';
 import 'package:fl_clash/enum/enum.dart';
@@ -124,11 +125,35 @@ class CommonAction extends _$CommonAction {
 class SetupAction extends _$SetupAction {
   Timer? _updateTimer;
   DateTime? startTime;
+  bool _startingListener = false;
+  late final _profileUpdates = ProfileUpdateQueue(
+    canRefresh: () =>
+        system.isOhos &&
+        !_startingListener &&
+        isStart &&
+        ref.read(initProvider) &&
+        ref.read(appSettingProvider).easyTier.enable,
+    refresh: () => _applyProfile(force: true, silence: true),
+    onError: (error, stack) {
+      final message = redactEasyTierSecret(
+        error.toString(),
+        ref.read(appSettingProvider).easyTier.networkSecret,
+      );
+      ref.read(logsProvider.notifier).add(
+        Log.app('[EasyTier] route refresh failed: $message')
+            .copyWith(logLevel: LogLevel.warning),
+      );
+    },
+  );
 
   bool get isStart => startTime != null && startTime!.isBeforeNow;
 
   @override
-  void build() {}
+  void build() {
+    ref.onDispose(() => _profileUpdates.dispose());
+  }
+
+  void refreshEasyTierRoutes() => _profileUpdates.requestRefresh();
 
   SetupParams get _setupParams {
     final selectedMap = ref.read(selectedMapProvider);
@@ -146,6 +171,7 @@ class SetupAction extends _$SetupAction {
   }
 
   Future<void> _handleStart() async {
+    _startingListener = true;
     _updateTimer?.cancel();
     startTime ??= DateTime.now();
     //The local status must be updated when performing the run task
@@ -175,6 +201,9 @@ class SetupAction extends _$SetupAction {
       handleCrash();
       if (message != error.toString()) throw message;
       rethrow;
+    } finally {
+      _startingListener = false;
+      _profileUpdates.resumeRefresh();
     }
   }
 
@@ -224,7 +253,7 @@ class SetupAction extends _$SetupAction {
     if (isStart) {
       ref.read(logsProvider.notifier).add(
         Log.app(
-          '[STARTUP] ET-LOG-20261013-2 start requested; '
+          '[STARTUP] ET-LOG-20261013-3 start requested; '
           'isInit=$isInit, initialized=${ref.read(initProvider)}, '
           'easyTier=${ref.read(appSettingProvider).easyTier.enable}, '
           'mixedPort=${ref.read(patchClashConfigProvider).mixedPort}',
@@ -353,6 +382,19 @@ class SetupAction extends _$SetupAction {
     bool silence = false,
     bool force = false,
     FutureOr<void> Function()? preloadInvoke,
+  }) {
+    Future<void> apply() => _applyProfile(
+      silence: silence,
+      force: force,
+      preloadInvoke: preloadInvoke,
+    );
+    return system.isOhos ? _profileUpdates.run(apply) : apply();
+  }
+
+  Future<void> _applyProfile({
+    bool silence = false,
+    bool force = false,
+    FutureOr<void> Function()? preloadInvoke,
   }) async {
     await _setupConfig(
       force: force,
@@ -416,6 +458,12 @@ class SetupAction extends _$SetupAction {
         easyTier: system.isOhos
             ? ref.read(appSettingProvider).easyTier
             : const EasyTierProps(),
+        easyTierLearnedCidrs: system.isOhos
+            ? ref.read(easyTierRoutesProvider).activeCidrs
+            : const [],
+        easyTierBlockedCidrs: system.isOhos
+            ? ref.read(easyTierRoutesProvider).blockedCidrs
+            : const [],
       ),
     );
     return res;

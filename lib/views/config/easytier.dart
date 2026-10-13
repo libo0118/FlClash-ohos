@@ -65,6 +65,12 @@ class EasyTierSettings extends ConsumerWidget {
     final props = ref.watch(
       appSettingProvider.select((state) => state.easyTier),
     );
+    final routes = ref.watch(easyTierRoutesProvider);
+    final routeStatus = switch (routes.status) {
+      'starting' => l10n.easyTierRoutesStarting,
+      'ready' => l10n.easyTierRoutesReady,
+      _ => l10n.easyTierRoutesStopped,
+    };
     return Column(
       children: [
         ListItem.switchItem(
@@ -81,10 +87,24 @@ class EasyTierSettings extends ConsumerWidget {
           subtitle: Text(
             props.networkName.isEmpty
                 ? l10n.easyTierConfigureHint
-                : '${props.networkName}\n${props.cidrs.join(', ')}',
+                : [props.networkName, ...props.cidrs].join('\n'),
           ),
           onTap: () => _update(context, ref),
         ),
+        if (props.enable) ...[
+          const Divider(height: 0),
+          ListItem(
+            title: Text(l10n.easyTierLearnedCidrs),
+            subtitle: SelectableText(
+              '$routeStatus\n${routes.activeCidrs.isEmpty ? l10n.easyTierRoutesEmpty : routes.activeCidrs.join('\n')}',
+            ),
+          ),
+          if (routes.blockedCidrs.isNotEmpty)
+            ListItem(
+              title: Text(l10n.easyTierBlockedCidrs),
+              subtitle: SelectableText(routes.blockedCidrs.join('\n')),
+            ),
+        ],
       ],
     );
   }
@@ -203,7 +223,7 @@ class _EasyTierConfigurationDialogState
               ),
               validator: (value) {
                 final cidrs = splitEasyTierLines(value ?? '');
-                return cidrs.isNotEmpty && cidrs.every(isEasyTierCidr)
+                return cidrs.every(isEasyTierCidr)
                     ? null
                     : l10n.easyTierInvalidCidrs;
               },

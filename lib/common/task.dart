@@ -270,7 +270,12 @@ Future<VM2<String, String>> _makeRealProfileTask(
     rawConfig['proxy-groups'] = data.proxyGroups;
   }
   rawConfig['rules'] = rules;
-  applyEasyTierConfig(rawConfig, data.easyTier);
+  applyEasyTierConfig(
+    rawConfig,
+    data.easyTier,
+    learnedCidrs: data.easyTierLearnedCidrs,
+    blockedCidrs: data.easyTierBlockedCidrs,
+  );
   final yaml = await _encodeYaml(Map<String, dynamic>.from(rawConfig));
   return VM2(yaml, yaml.toMd5());
 }

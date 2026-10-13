@@ -1,9 +1,19 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:fl_clash/models/models.dart';
 
 const easyTierSocksPort = 17890;
 const easyTierProxyName = '__FlClash_EasyTier__';
+
+// Local IPC identity only; never include this credential-derived tag in logs.
+String easyTierRouteConfigTag(EasyTierProps props) => sha256.convert(
+  utf8.encode(jsonEncode([
+    props.networkName,
+    props.networkSecret,
+    props.peerUrls,
+  ])),
+).toString();
 
 String redactEasyTierSecret(String message, String secret) {
   if (secret.isEmpty) return message;
@@ -39,22 +49,37 @@ bool isEasyTierPeerUrl(String value) {
   return uri.port > 0 && uri.port <= 65535;
 }
 
-bool isEasyTierCidr(String value) {
+({int address, int prefix})? _parseEasyTierCidr(String value) {
   final parts = value.split('/');
-  if (parts.length != 2) return false;
-  if (!RegExp(r'^([1-9]|[12][0-9]|3[0-2])$').hasMatch(parts[1])) return false;
+  if (parts.length != 2) return null;
+  if (!RegExp(r'^([1-9]|[12][0-9]|3[0-2])$').hasMatch(parts[1])) return null;
   final octets = parts[0].split('.');
-  final prefix = int.tryParse(parts[1]);
-  if (octets.length != 4 || prefix == null || prefix < 1 || prefix > 32) {
-    return false;
-  }
+  if (octets.length != 4) return null;
   var address = 0;
   for (final octet in octets) {
-    if (!RegExp(r'^(0|[1-9][0-9]{0,2})$').hasMatch(octet)) return false;
+    if (!RegExp(r'^(0|[1-9][0-9]{0,2})$').hasMatch(octet)) return null;
     final number = int.parse(octet);
-    if (number > 255) return false;
+    if (number > 255) return null;
     address = (address << 8) | number;
   }
+  return (address: address, prefix: int.parse(parts[1]));
+}
+
+String? normalizeEasyTierCidr(String value) {
+  final parsed = _parseEasyTierCidr(value.trim());
+  if (parsed == null) return null;
+  final mask = (0xffffffff << (32 - parsed.prefix)) & 0xffffffff;
+  final address = parsed.address & mask;
+  final cidr = '${(address >> 24) & 255}.${(address >> 16) & 255}.'
+      '${(address >> 8) & 255}.${address & 255}/${parsed.prefix}';
+  return isEasyTierCidr(cidr) ? cidr : null;
+}
+
+bool isEasyTierCidr(String value) {
+  final parsed = _parseEasyTierCidr(value);
+  if (parsed == null) return false;
+  final address = parsed.address;
+  final prefix = parsed.prefix;
   final mask = (0xffffffff << (32 - prefix)) & 0xffffffff;
   if ((address & mask) != address) return false;
   final end = address | (0xffffffff ^ mask);
@@ -72,10 +97,14 @@ bool isEasyTierConfigValid(EasyTierProps props) =>
     props.networkSecret.trim().isNotEmpty &&
     props.peerUrls.isNotEmpty &&
     props.peerUrls.every(isEasyTierPeerUrl) &&
-    props.cidrs.isNotEmpty &&
     props.cidrs.every(isEasyTierCidr);
 
-void applyEasyTierConfig(Map config, EasyTierProps props) {
+void applyEasyTierConfig(
+  Map config,
+  EasyTierProps props, {
+  Iterable<String> learnedCidrs = const [],
+  Iterable<String> blockedCidrs = const [],
+}) {
   if (!props.enable) return;
   if (!isEasyTierConfigValid(props)) {
     throw const FormatException('Invalid EasyTier configuration');
@@ -105,6 +134,18 @@ void applyEasyTierConfig(Map config, EasyTierProps props) {
   while (names.contains(name)) {
     name = '${name}_';
   }
+  final learned = learnedCidrs
+      .map(normalizeEasyTierCidr)
+      .whereType<String>()
+      .toSet()
+      .toList()..sort();
+  final active = {...props.cidrs, ...learned};
+  final blocked = blockedCidrs
+      .map(normalizeEasyTierCidr)
+      .whereType<String>()
+      .where((cidr) => !active.contains(cidr))
+      .toSet()
+      .toList()..sort();
   config['mode'] = 'rule';
   config['proxies'] = [
     ...proxies,
@@ -117,7 +158,8 @@ void applyEasyTierConfig(Map config, EasyTierProps props) {
     },
   ];
   config['rules'] = [
-    ...props.cidrs.map((cidr) => 'IP-CIDR,$cidr,$name,no-resolve'),
+    ...active.map((cidr) => 'IP-CIDR,$cidr,$name,no-resolve'),
+    ...blocked.map((cidr) => 'IP-CIDR,$cidr,REJECT,no-resolve'),
     ...List<String>.from(config['rules'] ?? []),
   ];
 }
