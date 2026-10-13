@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:fl_clash/common/constant.dart';
+import 'package:fl_clash/common/measure.dart';
 import 'package:fl_clash/common/theme.dart';
 import 'package:fl_clash/l10n/l10n.dart';
 import 'package:fl_clash/models/models.dart';
@@ -343,6 +344,7 @@ Future<void> _pumpApp(WidgetTester tester, Widget home, {
     ),
     builder: (context, child) {
       globalState.theme = CommonTheme.of(context, textScale);
+      globalState.measure = Measure.of(context, textScale);
       return RepaintBoundary(key: _captureKey, child: MediaQuery(
         data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(textScale)), child: child!,
       ));

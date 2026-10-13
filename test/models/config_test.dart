@@ -151,7 +151,7 @@ void main() {
 
       expect(props.dashboardWidgets.last, DashboardWidget.easyTier);
       expect(props.dashboardLayoutVersion, currentDashboardLayoutVersion);
-      expect(AppSettingProps.fromJson(props.toJson()), props);
+      expect(roundTrip(props.toJson, AppSettingProps.fromJson), props);
     });
 
     test('legacy config appends once while preserving its custom order', () {
@@ -183,7 +183,7 @@ void main() {
 
       expect(props.dashboardWidgets, [DashboardWidget.easyTier]);
       expect(props.dashboardLayoutVersion, currentDashboardLayoutVersion);
-      expect(AppSettingProps.safeFromJson(props.toJson()), props);
+      expect(roundTrip(props.toJson, AppSettingProps.safeFromJson), props);
     });
 
     test('legacy layout already containing EasyTier is not duplicated', () {
@@ -227,7 +227,7 @@ void main() {
 
       expect(props.dashboardWidgets, [DashboardWidget.memoryInfo, DashboardWidget.trafficUsage, DashboardWidget.networkSpeed]);
       expect(props.dashboardLayoutVersion, currentDashboardLayoutVersion + 1);
-      expect(AppSettingProps.fromJson(props.toJson()), props);
+      expect(roundTrip(props.toJson, AppSettingProps.fromJson), props);
     });
 
     test('the grid save mapping preserves a moved tile on reload', () {
@@ -270,7 +270,7 @@ void main() {
         DashboardWidget.intranetIp,
       ]);
       expect(
-        AppSettingProps.safeFromJson(restored.appSettingProps.toJson())
+        roundTrip(restored.appSettingProps.toJson, AppSettingProps.safeFromJson)
             .dashboardWidgets,
         restored.appSettingProps.dashboardWidgets,
       );
@@ -283,7 +283,7 @@ void main() {
       });
 
       expect(props.dashboardWidgets, isEmpty);
-      expect(AppSettingProps.fromJson(props.toJson()).dashboardWidgets, isEmpty);
+      expect(roundTrip(props.toJson, AppSettingProps.fromJson).dashboardWidgets, isEmpty);
     });
 
     test('the editable entry is available only on HarmonyOS', () {
