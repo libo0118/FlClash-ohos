@@ -2,7 +2,51 @@
   "string": [
     {
       "name": "widget_desc",
-      "value": "不需要添加至桌面或负一屏。\n进入此页面直接退出即可。"
+      "value": "开关 VPN 并查看连接状态"
+    },
+    {
+      "name": "widget_display_name",
+      "value": "FlClash VPN"
+    },
+    {
+      "name": "widget_connected",
+      "value": "已连接"
+    },
+    {
+      "name": "widget_disconnected",
+      "value": "未连接"
+    },
+    {
+      "name": "widget_starting",
+      "value": "启动中…"
+    },
+    {
+      "name": "widget_stopping",
+      "value": "停止中…"
+    },
+    {
+      "name": "widget_failed",
+      "value": "操作失败，请打开应用"
+    },
+    {
+      "name": "widget_open_required",
+      "value": "需要打开应用"
+    },
+    {
+      "name": "widget_open_control",
+      "value": "打开并操作"
+    },
+    {
+      "name": "widget_stop",
+      "value": "关闭"
+    },
+    {
+      "name": "widget_start",
+      "value": "开启"
+    },
+    {
+      "name": "widget_open",
+      "value": "打开应用"
     }
   ]
 }

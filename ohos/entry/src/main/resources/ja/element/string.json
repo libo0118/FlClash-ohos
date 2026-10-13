@@ -2,7 +2,51 @@
   "string": [
     {
       "name": "widget_desc",
-      "value": "ホーム画面に追加不要です。\nこのページを閉じてください。"
+      "value": "VPN の切替と接続状態"
+    },
+    {
+      "name": "widget_display_name",
+      "value": "FlClash VPN"
+    },
+    {
+      "name": "widget_connected",
+      "value": "接続済み"
+    },
+    {
+      "name": "widget_disconnected",
+      "value": "未接続"
+    },
+    {
+      "name": "widget_starting",
+      "value": "接続中…"
+    },
+    {
+      "name": "widget_stopping",
+      "value": "停止中…"
+    },
+    {
+      "name": "widget_failed",
+      "value": "失敗・アプリを開く"
+    },
+    {
+      "name": "widget_open_required",
+      "value": "アプリで準備してください"
+    },
+    {
+      "name": "widget_open_control",
+      "value": "開いて操作"
+    },
+    {
+      "name": "widget_stop",
+      "value": "停止"
+    },
+    {
+      "name": "widget_start",
+      "value": "開始"
+    },
+    {
+      "name": "widget_open",
+      "value": "アプリを開く"
     }
   ]
 }

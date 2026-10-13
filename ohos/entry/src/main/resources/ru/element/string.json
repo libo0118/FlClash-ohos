@@ -2,7 +2,51 @@
   "string": [
     {
       "name": "widget_desc",
-      "value": "Не нужно добавлять на экран.\nПросто закройте страницу."
+      "value": "Переключатель VPN и состояние"
+    },
+    {
+      "name": "widget_display_name",
+      "value": "FlClash VPN"
+    },
+    {
+      "name": "widget_connected",
+      "value": "Подключено"
+    },
+    {
+      "name": "widget_disconnected",
+      "value": "Отключено"
+    },
+    {
+      "name": "widget_starting",
+      "value": "Подключение…"
+    },
+    {
+      "name": "widget_stopping",
+      "value": "Остановка…"
+    },
+    {
+      "name": "widget_failed",
+      "value": "Ошибка · откройте приложение"
+    },
+    {
+      "name": "widget_open_required",
+      "value": "Откройте приложение"
+    },
+    {
+      "name": "widget_open_control",
+      "value": "Открыть"
+    },
+    {
+      "name": "widget_stop",
+      "value": "Выключить"
+    },
+    {
+      "name": "widget_start",
+      "value": "Включить"
+    },
+    {
+      "name": "widget_open",
+      "value": "Приложение"
     }
   ]
 }

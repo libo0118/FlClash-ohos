@@ -10,6 +10,7 @@ import AbilityConstant from '@ohos.app.ability.AbilityConstant';
 import PowerManager from '../managers/PowerManager'
 import NetworkManager from '../managers/NetworkManager'
 import EasyTierManager, { EasyTierRouteSnapshot, sanitizeStartupMessage, startupErrorMessage } from '../managers/EasyTierManager'
+import VpnCardManager from '../managers/VpnCardManager'
 
 const IPV4_ADDRESS = "172.19.0.1/30"
 const IPV6_ADDRESS = "fdfe:dcba:9876::1/126"
@@ -144,6 +145,7 @@ export default class VpnExtAbility extends VpnExtensionAbility {
   }
 
   onDestroy(): void {
+    new VpnCardManager(this.context).publish('stopped', false)
     this.recordDiagnostic('VPN', 'info', '扩展销毁，开始清理')
     this.destroyed = true
     ++this.startGeneration
@@ -365,6 +367,7 @@ export default class VpnExtAbility extends VpnExtensionAbility {
         console.error('VPN cleanup failed')
       }
     }).finally(() => {
+      new VpnCardManager(this.context).publish(error ? 'failed' : this.runTime === 0 ? 'stopped' : 'connected')
       if (remote) this.sendResult(remote, this.runTime, error)
     })
   }
@@ -392,6 +395,7 @@ export default class VpnExtAbility extends VpnExtensionAbility {
   }
 
   handleStartService(vpnOptions: VpnOptions, runTime: number, remote: rpc.RemoteObject): void {
+    new VpnCardManager(this.context).publish('starting')
     const generation = ++this.startGeneration
     this.easyTier?.cancel()
     let stage = 'VPN 清理旧连接'
@@ -458,6 +462,7 @@ export default class VpnExtAbility extends VpnExtensionAbility {
   }
 
   handleStopService(remote: rpc.RemoteObject): void {
+    new VpnCardManager(this.context).publish('stopping')
     this.recordDiagnostic('VPN', 'info', '收到停止请求')
     ++this.startGeneration
     this.easyTier?.cancel()

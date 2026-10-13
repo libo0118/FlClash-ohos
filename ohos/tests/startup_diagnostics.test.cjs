@@ -64,7 +64,7 @@ const context = vm.createContext({
   startTUN() {}, stopTun() {}, suspend() {}, updateDns() {},
 })
 const root = path.join(__dirname, '../entry/src/main/ets')
-for (const file of ['utils/Rpc.ets', 'managers/EasyTierManager.ets', 'entryability/EntryAbility.ets', 'extensionAbility/VpnExtAbility.ets', 'plugins/ServicePlugin.ets']) {
+for (const file of ['utils/Rpc.ets', 'managers/EasyTierManager.ets', 'managers/VpnCardManager.ets', 'entryability/EntryAbility.ets', 'extensionAbility/VpnExtAbility.ets', 'plugins/ServicePlugin.ets']) {
   let source = fs.readFileSync(path.join(root, file), 'utf8')
   source = source.replace(/^import[\s\S]*?from\s+['"][^'"]+['"];?[^\S\r\n]*\r?\n/gm, '')
   source = source.replace(/\bexport default /g, '').replace(/\bexport /g, '')

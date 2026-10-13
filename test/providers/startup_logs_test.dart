@@ -124,7 +124,7 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
-    final startup = Log.app('[STARTUP] ET-LOG-20261013-5 start requested');
+    final startup = Log.app('[STARTUP] ET-LOG-20261013-6 start requested');
     container.read(logsProvider.notifier).add(startup);
     container.read(requestsProvider.notifier).addRequest(
       TrackerInfo(
@@ -164,7 +164,7 @@ void main() {
             loggedBeforeCoreCheck = container
                 .read(logsProvider)
                 .list
-                .any((log) => log.payload.contains('ET-LOG-20261013-5'));
+                .any((log) => log.payload.contains('ET-LOG-20261013-6'));
           }),
         ),
       ],

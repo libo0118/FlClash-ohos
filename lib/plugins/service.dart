@@ -11,6 +11,8 @@ abstract mixin class ServiceListener {
   void onServiceEvent(CoreEvent event) {}
 
   void onServiceCrash(String message) {}
+
+  Future<void> onVpnCardAction(bool enable) async {}
 }
 
 class Service {
@@ -41,6 +43,11 @@ class Service {
           final message = call.arguments as String? ?? '';
           for (final listener in _listeners) {
             listener.onServiceCrash(message);
+          }
+          break;
+        case 'vpnCardToggle':
+          for (final listener in _listeners) {
+            await listener.onVpnCardAction(call.arguments == true);
           }
           break;
         default:
@@ -83,6 +90,14 @@ class Service {
 
   Future<bool> shutdown() async {
     return await methodChannel.invokeMethod<bool>('shutdown') ?? true;
+  }
+
+  Future<void> setVpnCardReady(bool ready) async {
+    await methodChannel.invokeMethod<bool>('vpnCardReady', ready);
+  }
+
+  Future<void> completeVpnCardAction([String status = '']) async {
+    await methodChannel.invokeMethod<bool>('vpnCardComplete', status);
   }
 
   Future<DateTime?> getRunTime() async {

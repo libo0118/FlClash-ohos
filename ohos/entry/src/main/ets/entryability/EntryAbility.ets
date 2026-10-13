@@ -15,6 +15,7 @@ import ServicePlugin from '../plugins/ServicePlugin';
 import AbilityConstant from '@ohos.app.ability.AbilityConstant';
 import AppPlugin from '../plugins/AppPlugin';
 import NotificationManager from '../managers/NotificationManager';
+import VpnCardManager, { VpnCardReply, VpnCardRequest } from '../managers/VpnCardManager';
 
 interface Connection {
   id: number
@@ -52,6 +53,7 @@ export class ResultStub extends rpc.RemoteObject {
 }
 
 export default class EntryAbility extends FlutterAbility {
+  private servicePlugin: ServicePlugin | undefined
   private sender: ChunkedSender = new ChunkedSender()
   private notificationManager: NotificationManager | undefined
   private connecting: Promise<Connection> | undefined
@@ -66,7 +68,8 @@ export default class EntryAbility extends FlutterAbility {
   configureFlutterEngine(flutterEngine: FlutterEngine): void {
     super.configureFlutterEngine(flutterEngine)
     flutterEngine.getPlugins()?.add(new AppPlugin(this))
-    flutterEngine.getPlugins()?.add(new ServicePlugin(this))
+    this.servicePlugin = new ServicePlugin(this)
+    flutterEngine.getPlugins()?.add(this.servicePlugin)
     GeneratedPluginRegistrant.registerWith(flutterEngine)
   }
 
@@ -74,9 +77,63 @@ export default class EntryAbility extends FlutterAbility {
     super.onCreate(want, launchParam)
     this.notificationManager = new NotificationManager(this.context)
     this.notificationManager?.subscribe()
+    const manager = new VpnCardManager(this.context)
+    manager.setReady(false)
+    manager.publish('unknown', false)
+    this.callee.on('vpnCardToggle', (data: rpc.MessageSequence) => {
+      try {
+        const request = JSON.parse(data.readString()) as VpnCardRequest
+        if (manager.accepts(request) && typeof request.enable === 'boolean') {
+          if (this.servicePlugin) this.servicePlugin.requestCardAction(request.enable)
+          else manager.publish('unknown', false)
+        }
+      } catch (_) {}
+      return new VpnCardReply()
+    })
+    this.callee.on('vpnCardRefresh', (data: rpc.MessageSequence) => {
+      try {
+        const request = JSON.parse(data.readString()) as VpnCardRequest
+        if (manager.accepts(request)) {
+          if (this.servicePlugin) this.servicePlugin.refreshCard()
+          else manager.publish('unknown', false)
+        }
+      } catch (_) {}
+      return new VpnCardReply()
+    })
+    this.handleCardWant(want)
+  }
+
+  onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
+    super.onNewWant(want, launchParam)
+    this.handleCardWant(want)
+  }
+
+  private pendingCardAction: boolean | undefined
+
+  private handleCardWant(want: Want): void {
+    const params = want.parameters
+    if (!params || typeof params['vpnCardEnable'] !== 'boolean') return
+    const request: VpnCardRequest = {
+      formId: params['formId'] as string,
+      token: params['token'] as string,
+      enable: params['vpnCardEnable'] as boolean,
+    }
+    if (!new VpnCardManager(this.context).accepts(request)) return
+    if (this.servicePlugin) this.servicePlugin.queueCardAction(request.enable as boolean)
+    else this.pendingCardAction = request.enable
+  }
+
+  takePendingCardAction(): boolean | undefined {
+    const pending = this.pendingCardAction
+    this.pendingCardAction = undefined
+    return pending
   }
 
   onDestroy(): void {
+    this.callee.off('vpnCardToggle')
+    this.callee.off('vpnCardRefresh')
+    new VpnCardManager(this.context).setReady(false)
+    new VpnCardManager(this.context).publish('unknown', false)
     super.onDestroy()
     this.disconnect()
     this.notificationManager?.unsubscribe()

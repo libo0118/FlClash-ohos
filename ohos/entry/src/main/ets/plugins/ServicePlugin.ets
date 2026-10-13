@@ -12,10 +12,16 @@ import { publishEvent } from '../utils/Event'
 import { globalState, RunState } from '../GlobalState';
 import EntryAbility from '../entryability/EntryAbility';
 import { sanitizeStartupMessage, startupErrorMessage } from '../managers/EasyTierManager'
+import VpnCardManager from '../managers/VpnCardManager'
 
 export default class ServicePlugin implements FlutterPlugin, MethodCallHandler {
   private parent: EntryAbility
   private channel: MethodChannel | undefined
+  private cardReady: boolean = false
+  private cardPending: boolean = false
+  private queuedCardAction: boolean | undefined
+  private cardStateRevision: number = 0
+  private get cardManager(): VpnCardManager { return new VpnCardManager(this.parent.context) }
 
   constructor(entryAbility: EntryAbility) {
     this.parent = entryAbility
@@ -31,6 +37,12 @@ export default class ServicePlugin implements FlutterPlugin, MethodCallHandler {
   }
 
   onDetachedFromEngine(binding: FlutterPluginBinding): void {
+    this.cardReady = false
+    this.cardPending = false
+    this.queuedCardAction = undefined
+    ++this.cardStateRevision
+    this.cardManager.setReady(false)
+    this.cardManager.publish('unknown', false)
     if (this.channel != null) {
       this.channel.setMethodCallHandler(null)
     }
@@ -51,9 +63,61 @@ export default class ServicePlugin implements FlutterPlugin, MethodCallHandler {
       this.handleStop(result)
     } else if (call.method === "getRunTime") {
       this.handleGetRunTime(result)
+    } else if (call.method === 'vpnCardReady') {
+      this.cardReady = call.args === true
+      this.cardManager.setReady(this.cardReady)
+      result.success(true)
+      if (!this.cardReady) this.cardManager.publish('unknown', false)
+      if (this.cardReady) {
+        const parentPending = this.parent.takePendingCardAction()
+        const pending = this.queuedCardAction ?? parentPending
+        this.queuedCardAction = undefined
+        if (pending !== undefined) this.requestCardAction(pending)
+        else this.refreshCard()
+      }
+    } else if (call.method === 'vpnCardComplete') {
+      this.cardPending = false
+      result.success(true)
+      if (call.args === 'failed') this.cardManager.publish('failed')
+      else if (call.args === 'openRequired') this.cardManager.publish('unknown', false)
+      else this.refreshCard()
     } else {
       result.notImplemented()
     }
+  }
+
+  queueCardAction(enable: boolean): void {
+    if (this.cardReady) this.requestCardAction(enable)
+    else if (this.queuedCardAction === undefined) this.queuedCardAction = enable
+  }
+
+  requestCardAction(enable: boolean): void {
+    if (!this.cardReady || !this.channel) {
+      this.cardManager.publish('unknown', false)
+      return
+    }
+    if (this.cardPending || globalState.runState === RunState.pending) return
+    this.cardPending = true
+    ++this.cardStateRevision
+    this.cardManager.publish(enable ? 'starting' : 'stopping')
+    this.channel.invokeMethod('vpnCardToggle', enable)
+  }
+
+  refreshCard(): void {
+    if (!this.cardReady) {
+      this.cardManager.publish('unknown', false)
+      return
+    }
+    if (this.cardPending || globalState.runState === RunState.pending) return
+    const revision = this.cardStateRevision
+    this.parent.handleGetRunTime().then((runTime: number) => {
+      if (revision !== this.cardStateRevision) return
+      globalState.runTime = runTime
+      if (globalState.runState !== RunState.pending) {
+        globalState.runState = runTime === 0 ? RunState.stop : RunState.start
+        this.cardManager.publish(runTime === 0 ? 'stopped' : 'connected')
+      }
+    }).catch(() => { this.cardManager.publish('failed', false) })
   }
 
   private handleInit(result: MethodResult): void {
@@ -66,6 +130,9 @@ export default class ServicePlugin implements FlutterPlugin, MethodCallHandler {
     this.parent.setOnDisconnected((message: string) => {
       globalState.runTime = 0
       globalState.runState = RunState.stop
+      ++this.cardStateRevision
+      this.cardPending = false
+      this.cardManager.publish('failed', false)
       this.channel?.invokeMethod("crash", message)
       publishEvent('SERVICE_STOP', '')
     })
@@ -75,14 +142,18 @@ export default class ServicePlugin implements FlutterPlugin, MethodCallHandler {
     this.parent.handleShutdown().finally(() => {
       globalState.runTime = 0
       globalState.runState = RunState.stop
+      ++this.cardStateRevision
+      this.cardManager.publish('stopped')
       result.success(true)
     })
   }
 
   private handleSyncState(call: MethodCall, result: MethodResult): void {
     globalState.state = JSON.parse(call.args) as State
+    this.cardManager.updateSummary(globalState.state.currentProfileName, globalState.state.vpnOptions?.easyTier?.enable ?? false)
     if (globalState.runState !== RunState.pending) {
       globalState.runState = globalState.runTime === 0 ? RunState.stop : RunState.start
+      this.cardManager.publish(globalState.runTime === 0 ? 'stopped' : 'connected')
     }
     result.success("")
   }
@@ -95,6 +166,8 @@ export default class ServicePlugin implements FlutterPlugin, MethodCallHandler {
   private handleStart(result: MethodResult): void {
     if (globalState.runState === RunState.stop) {
       globalState.runState = RunState.pending
+      ++this.cardStateRevision
+      this.cardManager.publish('starting')
       const options = globalState.state?.vpnOptions ?? new VpnOptions()
       const networkSecret = options.easyTier?.networkSecret ?? ''
       let completed = false
@@ -104,6 +177,8 @@ export default class ServicePlugin implements FlutterPlugin, MethodCallHandler {
         const message = sanitizeStartupMessage(error, networkSecret).slice(0, 2400)
         globalState.runTime = message ? 0 : runTime
         globalState.runState = globalState.runTime !== 0 ? RunState.start : RunState.stop
+        ++this.cardStateRevision
+        this.cardManager.publish(message ? 'failed' : globalState.runTime !== 0 ? 'connected' : 'stopped')
         if (message) {
           result.error('VPN_START_FAILED', message, null)
         } else {
@@ -122,13 +197,19 @@ export default class ServicePlugin implements FlutterPlugin, MethodCallHandler {
   private handleStop(result: MethodResult): void {
     if (globalState.runState !== RunState.stop) {
       globalState.runState = RunState.pending
+      ++this.cardStateRevision
+      this.cardManager.publish('stopping')
       const resultStub = new ResultStub("handleStop", (runTime: number) => {
         globalState.runTime = runTime
         globalState.runState = RunState.stop
+        ++this.cardStateRevision
+        this.cardManager.publish('stopped')
         result.success(true)
       })
       this.parent.handleStopService(resultStub).catch(() => {
         globalState.runState = RunState.start
+        ++this.cardStateRevision
+        this.cardManager.publish('failed')
         result.success(false)
       })
       return
@@ -139,6 +220,9 @@ export default class ServicePlugin implements FlutterPlugin, MethodCallHandler {
   private handleGetRunTime(result: MethodResult): void {
     this.parent.handleGetRunTime().then((runTime: number) => {
       globalState.runTime = runTime
+      if (globalState.runState !== RunState.pending) {
+        globalState.runState = runTime === 0 ? RunState.stop : RunState.start
+      }
     }).finally(() => {
       result.success(globalState.runTime)
     })

@@ -62,11 +62,21 @@
     },
     {
       "name": "widget_desc",
-      "value": ""
+      "value": "VPN switch and connection status"
     },
     {
       "name": "widget_display_name",
-      "value": ""
-    }
+      "value": "FlClash VPN"
+    },
+{"name":"widget_connected","value":"Connected"},
+{"name":"widget_disconnected","value":"Disconnected"},
+{"name":"widget_starting","value":"Starting…"},
+{"name":"widget_stopping","value":"Stopping…"},
+{"name":"widget_failed","value":"Failed · open app"},
+{"name":"widget_open_required","value":"Open app to prepare VPN"},
+{"name":"widget_open_control","value":"Open & control"},
+{"name":"widget_stop","value":"Turn off"},
+{"name":"widget_start","value":"Turn on"},
+{"name":"widget_open","value":"Open app"}
   ]
 }
