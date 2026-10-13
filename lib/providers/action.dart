@@ -253,7 +253,7 @@ class SetupAction extends _$SetupAction {
     if (isStart) {
       ref.read(logsProvider.notifier).add(
         Log.app(
-          '[STARTUP] ET-LOG-20261013-3 start requested; '
+          '[STARTUP] ET-LOG-20261013-4 start requested; '
           'isInit=$isInit, initialized=${ref.read(initProvider)}, '
           'easyTier=${ref.read(appSettingProvider).easyTier.enable}, '
           'mixedPort=${ref.read(patchClashConfigProvider).mixedPort}',

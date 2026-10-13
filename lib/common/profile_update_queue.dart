@@ -19,7 +19,7 @@ class ProfileUpdateQueue {
   Future<void> run(Future<void> Function() action) {
     final next = _tail.then((_) => action());
     // A failed profile must not prevent a later correction from running.
-    _tail = next.catchError((Object _, StackTrace __) {});
+    _tail = next.catchError((Object _, StackTrace _) {});
     return next;
   }
 

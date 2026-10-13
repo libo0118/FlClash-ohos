@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'widgets/start_button.dart';
+import 'widgets/easytier_peers.dart';
 
 typedef _IsEditWidgetBuilder = Widget Function(bool isEdit);
 
@@ -232,6 +233,9 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
   @override
   Widget build(BuildContext context) {
     final dashboardState = ref.watch(dashboardStateProvider);
+    final easyTier = ref.watch(
+      appSettingProvider.select((state) => state.easyTier),
+    );
     final columns = max(4 * ((dashboardState.contentWidth / 280).ceil()), 8);
     final spacing = 14.mAp;
     final children = [
@@ -260,7 +264,19 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
           alignment: Alignment.topCenter,
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(16).copyWith(bottom: 88),
-            child: isEdit
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (system.isOhos && easyTier.enable) ...[
+                  Consumer(
+                    builder: (context, ref, child) => EasyTierPeersCard(
+                      state: ref.watch(easyTierRoutesProvider),
+                      networkName: easyTier.networkName,
+                    ),
+                  ),
+                  SizedBox(height: spacing),
+                ],
+                isEdit
                 ? SystemBackBlock(
                     child: CommonPopScope(
                       child: SuperGrid(
@@ -285,6 +301,8 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
                     mainAxisSpacing: spacing,
                     children: children,
                   ),
+              ],
+            ),
           ),
         ),
       ),

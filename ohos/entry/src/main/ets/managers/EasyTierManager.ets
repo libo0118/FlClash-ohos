@@ -8,8 +8,25 @@ const INSTANCE_ID = '9d9ccb7f-71e5-4cb8-9fb1-a18d0845d6a0'
 const SOCKS_PORT = 17890
 const MAX_RUNTIME_JSON_LENGTH = 2 * 1024 * 1024
 const MAX_ROUTE_CANDIDATES = 4096
+const MAX_PEER_SNAPSHOTS = 512
+const PEER_PROTOCOLS = ['tcp', 'udp', 'ws', 'wss', 'quic', 'wg', 'faketcp', 'ring', 'unix']
 
 export type EasyTierRouteStatus = 'starting' | 'ready' | 'stopped'
+export type EasyTierPeerStatus = EasyTierRouteStatus | 'unavailable'
+
+export interface EasyTierPeerSnapshot {
+  peerId: string
+  hostname: string
+  ipv4: string | null
+  connectionType: 'direct' | 'relay'
+  latencyMs: number | null
+  protocols: string[]
+}
+
+interface EasyTierPeerTelemetry {
+  virtualIpv4: string | null
+  peers: EasyTierPeerSnapshot[]
+}
 
 export interface EasyTierRouteSnapshot {
   sessionId: string
@@ -17,6 +34,10 @@ export interface EasyTierRouteSnapshot {
   revision: number
   status: EasyTierRouteStatus
   cidrs: string[]
+  peerStatus: EasyTierPeerStatus
+  virtualIpv4: string | null
+  peers: EasyTierPeerSnapshot[]
+  capturedAt: number
 }
 
 export function sanitizeStartupMessage(message: string, networkSecret: string): string {
@@ -45,10 +66,18 @@ class EmbeddedNetworkConfig {
 }
 
 interface RuntimePeerConnection {
+  peerId: number
   isClosed: boolean
+  tunnelType: string | null
+  stats: RuntimePeerConnectionStats | null
+}
+
+interface RuntimePeerConnectionStats {
+  latencyUs: number
 }
 
 interface RuntimePeer {
+  peerId: number
   conns: RuntimePeerConnection[]
 }
 
@@ -59,6 +88,8 @@ interface RuntimeNode {
 }
 
 interface RuntimeRoute {
+  peerId: number
+  hostname: string | null
   ipv4: string | null
   ipv4Cidr: string | null
   proxyCidrs: string[]
@@ -183,10 +214,72 @@ export default class EasyTierManager {
 
   private hasLivePeer(instance: RuntimeInstance): boolean {
     // 配置快照也会伪造连接；只有实时节点信息具有 peerId。
-    return instance.running && !!instance.myNodeInfo?.virtualIpv4 &&
-      typeof instance.myNodeInfo?.peerId === 'number' && Number.isFinite(instance.myNodeInfo.peerId) &&
-      instance.myNodeInfo.peerId >= 0 && Array.isArray(instance.peers) &&
-      instance.peers.some((peer) => Array.isArray(peer.conns) && peer.conns.some((conn) => !conn.isClosed))
+    return instance.running === true && this.ipv4Address(instance.myNodeInfo?.virtualIpv4) !== null &&
+      this.validPeerId(instance.myNodeInfo?.peerId) && Array.isArray(instance.peers) &&
+      instance.peers.length <= MAX_ROUTE_CANDIDATES &&
+      instance.peers.some((peer) => !!peer && Array.isArray(peer.conns) &&
+        peer.conns.length <= MAX_ROUTE_CANDIDATES && peer.conns.some((conn) => !!conn && conn.isClosed === false))
+  }
+
+  private validPeerId(value: number | null | undefined): boolean {
+    return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 0xffffffff
+  }
+
+  private ipv4Address(value: string | null | undefined): string | null {
+    if (typeof value !== 'string' || value !== value.trim() || !/^\d{1,3}(\.\d{1,3}){3}$/.test(value)) return null
+    const octets = value.split('.').map((part) => Number(part))
+    return octets.every((part) => part <= 255) ? octets.join('.') : null
+  }
+
+  private readPeerTelemetry(instance: RuntimeInstance): EasyTierPeerTelemetry {
+    if (!Array.isArray(instance.peers) || instance.peers.length > MAX_ROUTE_CANDIDATES) {
+      throw new Error('节点列表超出同步限制')
+    }
+    const connections = new Map<number, RuntimePeerConnection[]>()
+    let connectionCount = 0
+    for (const peer of instance.peers) {
+      if (!peer || !this.validPeerId(peer.peerId) || !Array.isArray(peer.conns)) throw new Error('节点字段无效')
+      connectionCount += peer.conns.length
+      if (connectionCount > MAX_ROUTE_CANDIDATES) throw new Error('节点连接数量超出同步限制')
+      const active = connections.get(peer.peerId) ?? []
+      for (const conn of peer.conns) {
+        if (!conn || !this.validPeerId(conn.peerId) || conn.peerId !== peer.peerId || typeof conn.isClosed !== 'boolean') {
+          throw new Error('节点连接字段无效')
+        }
+        if (!conn.isClosed) active.push(conn)
+      }
+      connections.set(peer.peerId, active)
+    }
+    const peers: EasyTierPeerSnapshot[] = []
+    const seen = new Set<number>()
+    for (const route of instance.routes) {
+      if (!route || !this.validPeerId(route.peerId)) throw new Error('节点路由字段无效')
+      if (route.peerId === instance.myNodeInfo?.peerId || seen.has(route.peerId)) continue
+      seen.add(route.peerId)
+      if (peers.length >= MAX_PEER_SNAPSHOTS) throw new Error('节点数量超出显示限制')
+      const active = connections.get(route.peerId) ?? []
+      let latencyMs: number | null = null
+      const protocols = new Set<string>()
+      for (const conn of active) {
+        const latencyUs = conn.stats?.latencyUs
+        if (typeof latencyUs === 'number' && Number.isFinite(latencyUs) && latencyUs > 0) {
+          const measured = latencyUs / 1000
+          if (measured > 0 && (latencyMs === null || measured < latencyMs)) latencyMs = measured
+        }
+        if (typeof conn.tunnelType === 'string' && PEER_PROTOCOLS.includes(conn.tunnelType)) protocols.add(conn.tunnelType)
+      }
+      peers.push({
+        peerId: String(route.peerId),
+        hostname: typeof route.hostname === 'string' ?
+          sanitizeStartupMessage(route.hostname, this.networkSecret).replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 128) : '',
+        ipv4: this.ipv4Address(route.ipv4),
+        connectionType: active.length > 0 ? 'direct' : 'relay',
+        latencyMs,
+        protocols: Array.from(protocols).sort(),
+      })
+    }
+    peers.sort((left, right) => Number(left.peerId) - Number(right.peerId))
+    return { virtualIpv4: this.ipv4Address(instance.myNodeInfo?.virtualIpv4), peers }
   }
 
   private readRouteCidrs(instance: RuntimeInstance): string[] {
@@ -215,8 +308,10 @@ export default class EasyTierManager {
     return Array.from(new Set<string>(candidates)).sort()
   }
 
-  private publishRoutes(status: EasyTierRouteStatus, cidrs: string[]): void {
-    if (!this.routeSessionId || (status === this.routeStatus && cidrs.join('\n') === this.routeCidrs.join('\n'))) return
+  private publishRoutes(status: EasyTierRouteStatus, cidrs: string[], telemetry?: EasyTierPeerTelemetry,
+    heartbeat: boolean = false): void {
+    const routeChanged = status !== this.routeStatus || cidrs.join('\n') !== this.routeCidrs.join('\n')
+    if (!this.routeSessionId || (!routeChanged && !heartbeat)) return
     this.routeStatus = status
     this.routeCidrs = cidrs.slice()
     const snapshot: EasyTierRouteSnapshot = {
@@ -225,24 +320,45 @@ export default class EasyTierManager {
       revision: ++this.routeRevision,
       status,
       cidrs: cidrs.slice(),
+      peerStatus: telemetry ? 'ready' : status === 'ready' ? 'unavailable' : status,
+      virtualIpv4: telemetry?.virtualIpv4 ?? null,
+      peers: telemetry?.peers ?? [],
+      capturedAt: Date.now(),
     }
     try {
       this.onRoutes(snapshot)
     } catch (routeError) {
       this.log('warning', '路由事件传输失败，保留最新快照')
     }
-    if (status === 'ready') this.log('info', `自动路由快照已更新，网段数=${cidrs.length}`)
+    if (routeChanged && status === 'ready') this.log('info', `自动路由快照已更新，网段数=${cidrs.length}`)
+  }
+
+  private unavailableRoutes(generation: number): void {
+    if (this.active && generation === this.generation) {
+      this.publishRoutes(this.routeStatus ?? 'starting', this.routeCidrs, undefined, true)
+    }
   }
 
   private updateRoutes(instance: RuntimeInstance, generation: number): void {
-    if (!this.active || generation !== this.generation || !this.hasLivePeer(instance) || instance.errorMessage) return
+    if (!this.active || generation !== this.generation) return
+    if (!this.hasLivePeer(instance) || instance.errorMessage) {
+      this.unavailableRoutes(generation)
+      return
+    }
     try {
       const cidrs = this.readRouteCidrs(instance)
-      if (this.active && generation === this.generation) this.publishRoutes('ready', cidrs)
+      let telemetry: EasyTierPeerTelemetry | undefined
+      try {
+        telemetry = this.readPeerTelemetry(instance)
+      } catch (telemetryError) {
+        // Display data must not prevent valid route updates.
+      }
+      if (this.active && generation === this.generation) this.publishRoutes('ready', cidrs, telemetry, true)
       this.routeReadFailed = false
     } catch (routeError) {
       if (!this.routeReadFailed) this.log('warning', '读取自动路由快照失败，保留已有网段')
       this.routeReadFailed = true
+      this.unavailableRoutes(generation)
     }
   }
 
@@ -250,9 +366,11 @@ export default class EasyTierManager {
     try {
       const instance = this.readRuntimeInstance()
       if (instance) this.updateRoutes(instance, generation)
+      else this.unavailableRoutes(generation)
     } catch (routeError) {
       if (!this.routeReadFailed) this.log('warning', '读取自动路由快照失败，保留已有网段')
       this.routeReadFailed = true
+      this.unavailableRoutes(generation)
     }
   }
 
@@ -422,6 +540,7 @@ export default class EasyTierManager {
         const peers = instance?.peers?.filter((peer) => peer.conns.some((conn) => !conn.isClosed)).length ?? 0
         this.log('info', `连接状态：running=${instance?.running ?? false}，已连接节点=${peers}，虚拟 IPv4=${instance?.myNodeInfo?.virtualIpv4 ?? '未分配'}`)
         this.drainNativeLogs()
+        if (nextProgress > 0) this.unavailableRoutes(generation)
         nextProgress = Date.now() + 5000
       }
       if (instance?.errorMessage) throw new Error(instance.errorMessage)

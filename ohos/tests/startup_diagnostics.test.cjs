@@ -137,9 +137,24 @@ function routeEvents(calls) {
     assert.ok(Number.isInteger(snapshot.revision) && snapshot.revision > 0)
     assert.ok(['starting', 'ready', 'stopped'].includes(snapshot.status))
     assert.ok(Array.isArray(snapshot.cidrs) && snapshot.cidrs.every((cidr) => typeof cidr === 'string'))
+    assert.ok(['starting', 'ready', 'stopped', 'unavailable'].includes(snapshot.peerStatus))
+    assert.ok(Number.isInteger(snapshot.capturedAt) && snapshot.capturedAt > 0)
+    assert.ok(snapshot.virtualIpv4 === null || typeof snapshot.virtualIpv4 === 'string')
+    assert.ok(Array.isArray(snapshot.peers) && snapshot.peers.length <= 512)
+    for (const peer of snapshot.peers) {
+      assert.match(peer.peerId, /^\d+$/)
+      assert.ok(typeof peer.hostname === 'string' && peer.hostname.length <= 128)
+      assert.ok(peer.ipv4 === null || typeof peer.ipv4 === 'string')
+      assert.ok(['direct', 'relay'].includes(peer.connectionType))
+      assert.ok(peer.latencyMs === null || Number.isFinite(peer.latencyMs) && peer.latencyMs > 0)
+      assert.ok(Array.isArray(peer.protocols) && peer.protocols.length <= 9)
+    }
     noSecret(JSON.stringify(snapshot))
     return snapshot
   })
+}
+function routeSnapshot(sessionId, revision, status, cidrs) {
+  return { sessionId, configTag: '', revision, status, cidrs, peerStatus: status === 'ready' ? 'unavailable' : status, virtualIpv4: null, peers: [], capturedAt: clock.now }
 }
 
 async function main() {
@@ -251,6 +266,8 @@ async function main() {
   assert.equal(ring.length, 0)
   await advance(4000)
   assert.equal(logRows(liveRemote.calls).filter((row) => row.Payload.includes('连接状态')).length, 2)
+  assert.equal(routeEvents(liveRemote.calls).at(-1).peerStatus, 'starting')
+  assert.equal(routeEvents(liveRemote.calls).at(-1).capturedAt, clock.now, 'existing startup progress supplies a heartbeat')
   instance.errorMessage = `peer rejected ${escaped}`
   await advance(250)
   const liveFailure = await pendingStart
@@ -266,7 +283,7 @@ async function main() {
   resetNative()
   native.nextSocketProtectionRequest = () => new Promise((resolve) => { releaseProtection = resolve })
   native.failSocketProtection = () => releaseProtection?.(null)
-  const ready = { ...instance, errorMessage: null, myNodeInfo: { virtualIpv4: '10.144.144.2', virtualIpv4Cidr: '10.144.144.2/24', peerId: 23 }, peers: [{ conns: [{ isClosed: false }] }] }
+  const ready = { ...instance, errorMessage: null, myNodeInfo: { virtualIpv4: '10.144.144.2', virtualIpv4Cidr: '10.144.144.2/24', peerId: 23 }, peers: [{ peerId: 7, conns: [{ peerId: 7, isClosed: false, tunnelType: 'tcp', stats: { latencyUs: 12500 } }] }] }
   native.collectRuntimeStateJson = () => JSON.stringify({ instances: [ready] })
   const successRows = []
   const successManager = manager(successRows)
@@ -320,14 +337,28 @@ async function main() {
   const routeInstance = {
     ...ready,
     myNodeInfo: { virtualIpv4: '10.126.126.2', virtualIpv4Cidr: '10.126.126.2/24', peerId: 23 },
+    peers: [
+      { peerId: 7, conns: [
+        { peerId: 7, isClosed: false, tunnelType: 'tcp', stats: { latencyUs: 12500 }, remoteAddr: 'tcp://203.0.113.7:11010' },
+        { peerId: 7, isClosed: false, tunnelType: 'udp', stats: { latencyUs: 20000 } },
+        { peerId: 7, isClosed: true, tunnelType: 'quic', stats: { latencyUs: 1 } },
+      ] },
+      { peerId: 8, conns: [{ peerId: 8, isClosed: true, tunnelType: 'tcp', stats: { latencyUs: 2 } }] },
+      { peerId: 9, conns: [{ peerId: 9, isClosed: false, tunnelType: secret, stats: null }] },
+      { peerId: 99, conns: [{ peerId: 99, isClosed: false, tunnelType: 'tcp', stats: { latencyUs: 1000 } }] },
+    ],
     routes: [
-      { ipv4: '10.126.126.7', ipv4Cidr: '10.126.126.7/32', proxyCidrs: ['192.168.6.0/24', '2001:db8::/64'] },
-      { ipv4: '10.126.126.8', ipv4Cidr: null, proxyCidrs: ['192.168.6.0/24'], nextHopPeerId: 7, cost: 2 },
+      { peerId: 7, hostname: 'workstation', ipv4: '10.126.126.7', ipv4Cidr: '10.126.126.7/32', proxyCidrs: ['192.168.6.0/24', '2001:db8::/64'] },
+      { peerId: 8, hostname: 'relayed-node', ipv4: '10.126.126.8', ipv4Cidr: null, proxyCidrs: ['192.168.6.0/24'], nextHopPeerId: 7, cost: 2, pathLatency: 1000 },
+      { peerId: 9, hostname: 'no-measurement', ipv4: null, ipv4Cidr: null, proxyCidrs: [] },
+      { peerId: 23, hostname: 'self', ipv4: '10.126.126.2', ipv4Cidr: '10.126.126.2/24', proxyCidrs: [] },
     ],
   }
   let routeQueryError = false
+  let rawOverride = null
   native.collectRuntimeStateJson = () => {
     if (routeQueryError) throw error('transient query failure', 1)
+    if (rawOverride !== null) return rawOverride
     return JSON.stringify({ instances: [routeInstance] })
   }
   await routeManager.start(props, {}, 'test-config-tag').then(() => { routeStartFinished = true })
@@ -335,29 +366,91 @@ async function main() {
   assert.deepEqual(routes.map(({ status, revision }) => [status, revision]), [['starting', 1], ['ready', 2]])
   assert.ok(routes.every(({ configTag }) => configTag === 'test-config-tag'))
   assert.deepEqual(routes[1].cidrs, ['10.126.126.2/24', '10.126.126.7/32', '10.126.126.8/32', '192.168.6.0/24'])
+  assert.equal(routes[0].peerStatus, 'starting')
+  assert.equal(routes[0].virtualIpv4, null)
+  assert.deepEqual(routes[0].peers, [])
+  assert.equal(routes[1].peerStatus, 'ready')
+  assert.equal(routes[1].virtualIpv4, '10.126.126.2')
+  assert.deepEqual(routes[1].peers, [
+    { peerId: '7', hostname: 'workstation', ipv4: '10.126.126.7', connectionType: 'direct', latencyMs: 12.5, protocols: ['tcp', 'udp'] },
+    { peerId: '8', hostname: 'relayed-node', ipv4: '10.126.126.8', connectionType: 'relay', latencyMs: null, protocols: [] },
+    { peerId: '9', hostname: 'no-measurement', ipv4: null, connectionType: 'direct', latencyMs: null, protocols: [] },
+  ], 'route-known peers exclude self and unrelated relay, and only direct target RTT is measured')
   assert.deepEqual(routeEvents(routeRemote.calls), [routes[1]], 'full snapshots may coalesce while an earlier log RPC is in flight')
   assert.equal(intervalCount(), 1)
+  const initialCidrs = routes[1].cidrs
+  const routeLogCount = () => logRows(routeRemote.calls).filter((row) => row.Payload.includes('自动路由快照已更新')).length
+  assert.equal(routeLogCount(), 1)
   await advance(4000)
-  assert.equal(routes.length, 2, 'unchanged route table must not emit')
+  assert.equal(routes.length, 4, 'same-CIDR heartbeats keep peer telemetry fresh')
+  assert.deepEqual(routes.at(-1).cidrs, initialCidrs)
+  assert.equal(routes.at(-1).capturedAt, clock.now)
+  assert.equal(routeLogCount(), 1, 'metrics heartbeats must not spam route-change logs')
+  routeInstance.peers[0].conns[0].stats.latencyUs = 45000
+  await advance(2000)
+  assert.deepEqual(routes.at(-1).cidrs, initialCidrs)
+  assert.equal(routes.at(-1).peers[0].latencyMs, 20, 'peer-only changes still publish the smallest active RTT')
+  assert.equal(routeLogCount(), 1)
   routeQueryError = true
   await advance(2000)
-  assert.equal(routes.length, 2, 'query failure must retain the previous complete snapshot')
+  const assertUnavailable = () => {
+    assert.equal(routes.at(-1).status, 'ready')
+    assert.equal(routes.at(-1).peerStatus, 'unavailable')
+    assert.equal(routes.at(-1).virtualIpv4, null)
+    assert.deepEqual(routes.at(-1).peers, [])
+    assert.deepEqual(routes.at(-1).cidrs, Array.from(routeManager.routeCidrs), 'telemetry failure must preserve current routing')
+  }
+  assertUnavailable()
+  assert.deepEqual(routes.at(-1).cidrs, initialCidrs)
   routeQueryError = false
+  for (const raw of ['{', JSON.stringify({ instances: [] }), ' '.repeat(2 * 1024 * 1024 + 1)]) {
+    rawOverride = raw
+    await advance(2000)
+    assertUnavailable()
+    assert.deepEqual(routes.at(-1).cidrs, initialCidrs)
+  }
+  rawOverride = null
   routeInstance.routes[0].proxyCidrs = ['192.168.7.0/24']
   routeInstance.routes[1].proxyCidrs = []
   await advance(2000)
-  assert.equal(routes.length, 3)
-  assert.deepEqual(routes[2].cidrs, ['10.126.126.2/24', '10.126.126.7/32', '10.126.126.8/32', '192.168.7.0/24'])
-  assert.equal(routes[2].revision, 3)
+  const changedCidrs = ['10.126.126.2/24', '10.126.126.7/32', '10.126.126.8/32', '192.168.7.0/24']
+  assert.deepEqual(routes.at(-1).cidrs, changedCidrs)
+  assert.equal(routes.at(-1).peerStatus, 'ready')
+  assert.equal(routeLogCount(), 2)
   routeInstance.myNodeInfo.peerId = null
   routeInstance.routes[0].proxyCidrs = ['192.168.99.0/24']
   await advance(2000)
-  assert.equal(routes.length, 3, 'configured fallback with fabricated open peers must not be authoritative')
+  assertUnavailable()
+  assert.deepEqual(routes.at(-1).cidrs, changedCidrs, 'configured fallback with fabricated open peers must not be authoritative')
   routeInstance.myNodeInfo.peerId = 23
   routeInstance.routes[0].proxyCidrs = Array(4097).fill('192.168.99.0/24')
   await advance(2000)
-  assert.equal(routes.length, 3, 'oversized snapshot must be rejected rather than partially withdrawn')
+  assertUnavailable()
+  assert.deepEqual(routes.at(-1).cidrs, changedCidrs, 'oversized route snapshot must not partially withdraw routing')
   routeInstance.routes[0].proxyCidrs = ['192.168.7.0/24']
+  routeInstance.peers[0].peerId = 7.5
+  await advance(2000)
+  assertUnavailable()
+  routeInstance.peers[0].peerId = 7
+  const originalRoutes = routeInstance.routes
+  routeInstance.routes = Array.from({ length: 513 }, (_, index) => ({ peerId: 1000 + index, hostname: 'many', ipv4: null, ipv4Cidr: null, proxyCidrs: [] }))
+  await advance(2000)
+  assertUnavailable()
+  assert.deepEqual(routes.at(-1).cidrs, ['10.126.126.2/24'], 'display limit must not block valid route withdrawal')
+  routeInstance.routes = originalRoutes
+  await advance(2000)
+  assert.equal(routes.at(-1).peerStatus, 'ready')
+  const invalidAddress = JSON.parse(JSON.stringify(routeInstance))
+  invalidAddress.routes[0].ipv4 = '999.1.2.3'
+  invalidAddress.routes[0].hostname = `${secret}\u0000${'name'.repeat(80)}`
+  invalidAddress.peers[0].conns[0].stats.latencyUs = 0
+  invalidAddress.peers[0].conns[1].stats.latencyUs = -1
+  const parsedPeers = JSON.parse(JSON.stringify(routeManager.readPeerTelemetry(invalidAddress)))
+  assert.equal(parsedPeers.peers[0].ipv4, null)
+  assert.equal(parsedPeers.peers[0].latencyMs, null)
+  assert.equal(parsedPeers.peers[0].hostname.length, 128)
+  noSecret(JSON.stringify(parsedPeers))
+  for (let i = 1; i < routes.length; ++i) assert.equal(routes[i].revision, routes[i - 1].revision + 1)
 
   // The latest route snapshot survives log backlog eviction and replays to a newly attached listener.
   routeVpn.onDisconnect({})
@@ -365,13 +458,16 @@ async function main() {
   const replayRemote = remoteRecorder()
   routeVpn.handleSetEventListener(replayRemote.remote)
   await settle()
-  assert.deepEqual(routeEvents(replayRemote.calls), [routes[2]])
+  assert.deepEqual(routeEvents(replayRemote.calls), [routes.at(-1)])
   assert.equal(logRows(replayRemote.calls).length, 100)
   assert.equal(JSON.parse(replayRemote.calls[0]).data.type, 'easyTierRoutes')
   const oldTimer = [...clock.timers.values()].find((timer) => timer.interval).callback
   routeManager.cancel()
   await routeManager.stop()
   assert.equal(routes.at(-1).status, 'stopped')
+  assert.equal(routes.at(-1).peerStatus, 'stopped')
+  assert.equal(routes.at(-1).virtualIpv4, null)
+  assert.deepEqual(routes.at(-1).peers, [])
   assert.equal(routes.filter(({ status }) => status === 'stopped').length, 1)
   const oldSession = routes[0].sessionId
   const beforeRestart = routes.length
@@ -402,16 +498,17 @@ async function main() {
     await new Promise((resolve) => { releaseSend = resolve })
   } }
   blockedVpn.handleSetEventListener(pausedRemote)
-  blockedVpn.recordRoutes({ sessionId: 'old', revision: 1, status: 'ready', cidrs: ['10.1.0.0/24'] })
+  blockedVpn.recordRoutes(routeSnapshot('old', 1, 'ready', ['10.1.0.0/24']))
   await settle()
-  blockedVpn.recordRoutes({ sessionId: 'old', revision: 2, status: 'stopped', cidrs: [] })
-  blockedVpn.recordRoutes({ sessionId: 'new', revision: 1, status: 'starting', cidrs: [] })
+  blockedVpn.recordRoutes(routeSnapshot('old', 2, 'stopped', []))
+  const newSnapshot = routeSnapshot('new', 1, 'starting', [])
+  blockedVpn.recordRoutes(newSnapshot)
   const replacementRemote = remoteRecorder()
   blockedVpn.handleSetEventListener(replacementRemote.remote)
   releaseSend()
   await settle()
   assert.deepEqual(routeEvents(blocked.calls).map(({ sessionId }) => sessionId), ['old'])
-  assert.deepEqual(routeEvents(replacementRemote.calls), [{ sessionId: 'new', revision: 1, status: 'starting', cidrs: [] }])
+  assert.deepEqual(routeEvents(replacementRemote.calls), [newSnapshot])
 
   // Missing listeners retain a bounded backlog; the actual RPC chunk reader receives its ABI intact.
   const queuedVpn = new subject.VpnExtAbility()
@@ -510,6 +607,6 @@ async function main() {
   assert.equal(state.runTime, 0)
   assert.equal(intervalCount(), 0)
   assert.equal(clock.timers.size, 0)
-  console.log('PASS: live startup/native logs, route snapshot ABI and readiness, relayed route add/remove, transient/oversized/fallback retention, replay, initial-cleanup cancellation, full IPv4 EasyTier TUN and non-EasyTier split routes, rapid restart/timer ordering, bounded RPC backlog, redaction and legacy callbacks')
+  console.log('PASS: live startup/native logs, route and peer snapshot ABI, direct RTT units, relay/closed/self filtering, same-CIDR heartbeat, transient/malformed/oversized/fallback retention, replay, initial-cleanup cancellation, full IPv4 EasyTier TUN and non-EasyTier split routes, rapid restart/timer ordering, bounded RPC backlog, redaction and legacy callbacks')
 }
 main().catch((failure) => { console.error(failure); process.exitCode = 1 })

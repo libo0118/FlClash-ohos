@@ -161,10 +161,24 @@ jobs:
           dart run build_runner build --delete-conflicting-outputs
           dart format lib/common/easytier.dart lib/common/task.dart lib/core/lib.dart lib/models/config.dart lib/models/core.dart lib/models/state.dart lib/providers/action.dart lib/providers/app.dart lib/providers/state.dart test/providers/startup_logs_test.dart lib/views/config/easytier.dart lib/views/config/network.dart lib/views/dashboard/widgets/outbound_mode.dart test/common/easytier_test.dart
           dart format lib/common/profile_update_queue.dart lib/providers/easytier.dart lib/core/event.dart lib/enum/enum.dart lib/manager/core_manager.dart test/common/profile_update_queue_test.dart test/core/easytier_event_test.dart test/providers/easytier_routes_test.dart
+          dart format lib/views/dashboard/dashboard.dart lib/views/dashboard/widgets/easytier_peers.dart test/widgets/easytier_peers_test.dart test/providers/easytier_peers_test.dart
       - name: Analyze
         run: flutter analyze --no-fatal-infos
+      - name: Prepare Chinese font for dashboard renders
+        run: sudo apt-get install -qqy fonts-noto-cjk
       - name: Test
+        env:
+          EASYTIER_TEST_FONT: /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
+          EASYTIER_VISUAL_DIR: ${{ runner.temp }}/easytier-dashboard-renders
         run: flutter test --reporter expanded
+      - name: Upload dashboard renders
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: easytier-dashboard-renders
+          path: ${{ runner.temp }}/easytier-dashboard-renders
+          if-no-files-found: error
+          retention-days: 14
       - name: Save generated source changes
         if: always()
         run: |
