@@ -215,10 +215,13 @@ class SetupAction extends _$SetupAction {
             .tryStartCore(true);
         if (res) return;
         if (!ref.read(initProvider)) return;
-        await globalState.safeRun(() async {
-          await _handleStart();
-          applyProfileDebounce(force: true, silence: true);
-        });
+        await globalState.safeRun(
+          () async {
+            await _handleStart();
+            applyProfileDebounce(force: true, silence: true);
+          },
+          silence: false,
+        );
       } else {
         globalState.needInitStatus = false;
         ref.read(runTimeProvider.notifier).value = 0;
@@ -451,7 +454,7 @@ class SetupAction extends _$SetupAction {
         ref.read(checkIpNumProvider.notifier).add();
         await onUpdated?.call();
       },
-      silence: true,
+      silence: preloadInvoke == null,
       tag: !silence ? LoadingTag.proxies : null,
     );
   }
