@@ -26,6 +26,7 @@ void main() {
       enabledEasyTier.copyWith(networkName: 'other'),
       enabledEasyTier.copyWith(networkSecret: 'new-secret'),
       enabledEasyTier.copyWith(peerUrls: ['tcp://other.example.com:11010']),
+      enabledEasyTier.copyWith(ipv6: true),
     ]) {
       expect(easyTierRouteConfigTag(props), isNot(tag));
     }
@@ -45,6 +46,9 @@ void main() {
 
   test('EasyTier defaults to disabled and survives config persistence', () {
     expect(AppSettingProps.fromJson({}).easyTier.enable, false);
+    expect(EasyTierProps.fromJson({}).ipv6, false);
+    final ipv6Config = enabledEasyTier.copyWith(ipv6: true);
+    expect(EasyTierProps.fromJson(ipv6Config.toJson()).ipv6, true);
     const config = Config(
       themeProps: ThemeProps(),
       appSettingProps: AppSettingProps(easyTier: enabledEasyTier),

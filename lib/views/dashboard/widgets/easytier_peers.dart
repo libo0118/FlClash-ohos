@@ -8,11 +8,15 @@ import 'package:flutter/material.dart';
 class EasyTierPeersCard extends StatefulWidget {
   final EasyTierRoutesState state;
   final String networkName;
+  final bool enabled;
+  final VoidCallback? onSettings;
 
   const EasyTierPeersCard({
     super.key,
     required this.state,
     required this.networkName,
+    this.enabled = true,
+    this.onSettings,
   });
 
   @override
@@ -34,6 +38,17 @@ class _EasyTierPeersCardState extends State<EasyTierPeersCard> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.appLocalizations;
+    if (!widget.enabled) {
+      return CommonCard(
+        child: ListTile(
+          leading: const Icon(Icons.hub_outlined),
+          title: const Text('EasyTier'),
+          subtitle: Text(l10n.easyTierDashboardDisabled),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: widget.onSettings,
+        ),
+      );
+    }
     final state = widget.state;
     final status = state.peerStatus;
     final live = status == 'ready';
@@ -80,6 +95,12 @@ class _EasyTierPeersCardState extends State<EasyTierPeersCard> {
                 Expanded(
                   child: Text('EasyTier', style: context.textTheme.titleSmall),
                 ),
+                if (widget.onSettings != null)
+                  IconButton(
+                    tooltip: l10n.easyTierConfiguration,
+                    onPressed: widget.onSettings,
+                    icon: const Icon(Icons.settings_outlined),
+                  ),
               ],
             ),
             const SizedBox(height: 8),
@@ -206,6 +227,12 @@ class _EasyTierPeerRow extends StatelessWidget {
             ),
           ],
         ),
+        if (live && direct && peer.connections.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(l10n.easyTierConnectionAddresses, style: secondaryStyle),
+          for (final address in peer.connections)
+            SelectableText(address, style: secondaryStyle),
+        ],
       ],
     );
   }

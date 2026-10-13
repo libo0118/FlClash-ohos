@@ -8,6 +8,16 @@ import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+class EasyTierPage extends StatelessWidget {
+  const EasyTierPage({super.key});
+
+  @override
+  Widget build(BuildContext context) => CommonScaffold(
+    title: 'EasyTier',
+    body: ListView(children: const [EasyTierSettings()]),
+  );
+}
+
 class EasyTierSettings extends ConsumerWidget {
   const EasyTierSettings({super.key});
 
@@ -15,6 +25,7 @@ class EasyTierSettings extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref, {
     bool? enable,
+    bool? ipv6,
   }) async {
     final l10n = context.appLocalizations;
     if (ref.read(isStartProvider)) {
@@ -22,7 +33,9 @@ class EasyTierSettings extends ConsumerWidget {
       return;
     }
     var props = ref.read(appSettingProvider).easyTier;
-    if (enable == null || (enable && !isEasyTierConfigValid(props))) {
+    if (ipv6 != null) {
+      props = props.copyWith(ipv6: ipv6);
+    } else if (enable == null || (enable && !isEasyTierConfigValid(props))) {
       final result = await globalState.showCommonDialog<EasyTierProps>(
         child: EasyTierConfigurationDialog(
           props: props.copyWith(enable: enable ?? props.enable),
@@ -90,6 +103,15 @@ class EasyTierSettings extends ConsumerWidget {
                 : [props.networkName, ...props.cidrs].join('\n'),
           ),
           onTap: () => _update(context, ref),
+        ),
+        const Divider(height: 0),
+        ListItem.switchItem(
+          title: Text(l10n.easyTierIpv6),
+          subtitle: Text(l10n.easyTierIpv6Description),
+          delegate: SwitchDelegate(
+            value: props.ipv6,
+            onChanged: (value) => _update(context, ref, ipv6: value),
+          ),
         ),
         if (props.enable) ...[
           const Divider(height: 0),

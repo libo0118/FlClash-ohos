@@ -169,6 +169,7 @@ jobs:
       - name: Test
         env:
           EASYTIER_TEST_FONT: /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
+          EASYTIER_TEST_ICON_FONT: ${{ runner.tool_cache }}/flutter-ohos/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf
           EASYTIER_VISUAL_DIR: ${{ runner.temp }}/easytier-dashboard-renders
         run: flutter test --reporter expanded
       - name: Upload dashboard renders

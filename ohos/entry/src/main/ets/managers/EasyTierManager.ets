@@ -21,6 +21,7 @@ export interface EasyTierPeerSnapshot {
   connectionType: 'direct' | 'relay'
   latencyMs: number | null
   protocols: string[]
+  connections: string[]
 }
 
 interface EasyTierPeerTelemetry {
@@ -70,6 +71,9 @@ interface RuntimePeerConnection {
   isClosed: boolean
   tunnelType: string | null
   stats: RuntimePeerConnectionStats | null
+  localAddr: string | null
+  remoteAddr: string | null
+  resolvedRemoteAddr: string | null
 }
 
 interface RuntimePeerConnectionStats {
@@ -93,6 +97,7 @@ interface RuntimeRoute {
   ipv4: string | null
   ipv4Cidr: string | null
   proxyCidrs: string[]
+  cost: number
 }
 
 interface RuntimeInstance {
@@ -257,16 +262,24 @@ export default class EasyTierManager {
       if (route.peerId === instance.myNodeInfo?.peerId || seen.has(route.peerId)) continue
       seen.add(route.peerId)
       if (peers.length >= MAX_PEER_SNAPSHOTS) throw new Error('节点数量超出显示限制')
-      const active = connections.get(route.peerId) ?? []
+      const active = route.cost === 1 ? connections.get(route.peerId) ?? [] : []
       let latencyMs: number | null = null
       const protocols = new Set<string>()
+      const endpoints = new Set<string>()
       for (const conn of active) {
         const latencyUs = conn.stats?.latencyUs
         if (typeof latencyUs === 'number' && Number.isFinite(latencyUs) && latencyUs > 0) {
           const measured = latencyUs / 1000
           if (measured > 0 && (latencyMs === null || measured < latencyMs)) latencyMs = measured
         }
-        if (typeof conn.tunnelType === 'string' && PEER_PROTOCOLS.includes(conn.tunnelType)) protocols.add(conn.tunnelType)
+        if (typeof conn.tunnelType === 'string' && PEER_PROTOCOLS.includes(conn.tunnelType)) {
+          protocols.add(conn.tunnelType)
+          const local = this.socketAddress(conn.localAddr)
+          const remote = this.socketAddress(conn.resolvedRemoteAddr)
+          if (remote && endpoints.size < 4) {
+            endpoints.add(`${conn.tunnelType.toUpperCase()} ${local ? local + ' → ' : ''}${remote}`)
+          }
+        }
       }
       peers.push({
         peerId: String(route.peerId),
@@ -276,10 +289,25 @@ export default class EasyTierManager {
         connectionType: active.length > 0 ? 'direct' : 'relay',
         latencyMs,
         protocols: Array.from(protocols).sort(),
+        connections: Array.from(endpoints).sort(),
       })
     }
     peers.sort((left, right) => Number(left.peerId) - Number(right.peerId))
     return { virtualIpv4: this.ipv4Address(instance.myNodeInfo?.virtualIpv4), peers }
+  }
+
+  private socketAddress(value: string | null | undefined): string | null {
+    if (typeof value !== 'string' || value.length > 512) return null
+    const scheme = value.indexOf('://')
+    if (scheme < 0 || !PEER_PROTOCOLS.includes(value.slice(0, scheme))) return null
+    const authority = value.slice(scheme + 3).split(/[/?#]/)[0]
+    const address = authority.slice(authority.lastIndexOf('@') + 1)
+    const parts = address.match(/^(\[[0-9a-fA-F:.%]+\]|\d{1,3}(\.\d{1,3}){3}):(\d{1,5})$/)
+    if (!parts) return null
+    const port = Number(parts[3])
+    if (port < 1 || port > 65535) return null
+    if (!parts[1].startsWith('[') && this.ipv4Address(parts[1]) === null) return null
+    return `${parts[1]}:${port}`
   }
 
   private readRouteCidrs(instance: RuntimeInstance): string[] {
@@ -412,6 +440,7 @@ export default class EasyTierManager {
       config.network_name = props.networkName
       config.network_secret = props.networkSecret
       config.peer_urls = props.peerUrls
+      config.disable_ipv6 = props.ipv6 !== true
       this.active = true
       const generation = ++this.generation
       this.startLogTimer(generation)

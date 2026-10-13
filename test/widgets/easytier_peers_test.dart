@@ -5,14 +5,17 @@ import 'dart:ui' as ui;
 import 'package:fl_clash/common/constant.dart';
 import 'package:fl_clash/common/theme.dart';
 import 'package:fl_clash/l10n/l10n.dart';
-import 'package:fl_clash/providers/easytier.dart';
+import 'package:fl_clash/models/models.dart';
+import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
 import 'package:fl_clash/views/dashboard/widgets/easytier_peers.dart';
+import 'package:fl_clash/views/config/easytier.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 const _captureKey = ValueKey('easytier-render');
 const _direct = EasyTierPeer(
@@ -22,6 +25,7 @@ const _direct = EasyTierPeer(
   connectionType: 'direct',
   latencyMs: 12.4,
   protocols: ['TCP'],
+  connections: ['TCP 192.168.6.159:45000 → 192.168.6.183:11010'],
 );
 const _relay = EasyTierPeer(
   peerId: '43',
@@ -82,6 +86,12 @@ void main() {
       File(fontPath).readAsBytes().then((bytes) => ByteData.sublistView(bytes)),
     );
     await loader.load();
+    final iconPath = Platform.environment['EASYTIER_TEST_ICON_FONT'];
+    if (iconPath != null) {
+      final icons = FontLoader('MaterialIcons');
+      icons.addFont(File(iconPath).readAsBytes().then((bytes) => ByteData.sublistView(bytes)));
+      await icons.load();
+    }
   });
 
   testWidgets('shows selectable IPs, node count and measured direct delay', (
@@ -99,6 +109,45 @@ void main() {
     expect(find.text('TCP'), findsOneWidget);
     expect(find.text('Delay 12 ms'), findsOneWidget);
     expect(find.text('Delay —'), findsOneWidget);
+    expect(_selectable('TCP 192.168.6.159:45000 → 192.168.6.183:11010'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('settings is reachable when EasyTier is enabled or disabled', (tester) async {
+    var opened = 0;
+    await _pumpCard(tester, _state(), onSettings: () => opened++);
+    await tester.tap(find.byTooltip('EasyTier configuration'));
+    expect(opened, 1);
+    await _pumpCard(tester, _state(), enabled: false, onSettings: () => opened++);
+    expect(find.text('Set up and enable EasyTier'), findsOneWidget);
+    expect(_selectable('10.126.126.42'), findsNothing);
+    await tester.tap(find.text('Set up and enable EasyTier'));
+    expect(opened, 2);
+  });
+
+  testWidgets('EasyTier IPv6 switch persists independently of FlClash IPv6', (tester) async {
+    final container = ProviderContainer(overrides: [
+      appSettingProvider.overrideWithBuild((_, _) => const AppSettingProps(
+        easyTier: EasyTierProps(enable: true, networkName: 'test', networkSecret: 'test',
+          peerUrls: ['tcp://test.invalid:11010']),
+      )),
+      vpnSettingProvider.overrideWithBuild((_, _) => const VpnProps(ipv6: true)),
+      setupActionProvider.overrideWith(_SettingsSetup.new),
+    ]);
+    addTearDown(container.dispose);
+    await _pumpCard(tester, _state(), content: UncontrolledProviderScope(
+      container: container,
+      child: const EasyTierSettings(),
+    ));
+    expect(container.read(appSettingProvider).easyTier.ipv6, false);
+    await tester.tap(find.text('EasyTier IPv6'));
+    await tester.pumpAndSettle();
+    expect(container.read(appSettingProvider).easyTier.ipv6, true);
+    expect(container.read(vpnSettingProvider).ipv6, true);
+    await tester.tap(find.text('EasyTier IPv6'));
+    await tester.pumpAndSettle();
+    expect(container.read(appSettingProvider).easyTier.ipv6, false);
+    expect(container.read(vpnSettingProvider).ipv6, true);
     expect(tester.takeException(), isNull);
   });
 
@@ -128,6 +177,7 @@ void main() {
       expect(find.text('Delay 12 ms'), findsNothing);
       expect(find.text('Delay —'), findsNWidgets(2));
       expect(find.text('TCP'), findsNothing);
+      expect(_selectable('TCP 192.168.6.159:45000 → 192.168.6.183:11010'), findsNothing);
       expect(tester.takeException(), isNull);
     }
   });
@@ -204,6 +254,7 @@ void main() {
         ('phone-large-text', const Size(320, 1200), Brightness.dark, 1.6, 'ready'),
         ('phone-stale', const Size(390, 900), Brightness.dark, 1.0, 'stale'),
         ('phone-stopped', const Size(390, 900), Brightness.light, 1.0, 'stopped'),
+        ('phone-disabled', const Size(390, 900), Brightness.light, 1.0, 'disabled'),
       ];
       for (final (name, size, brightness, textScale, status) in cases) {
         await _pumpCard(
@@ -213,6 +264,7 @@ void main() {
           brightness: brightness,
           textScale: textScale,
           locale: const Locale('zh', 'CN'),
+          enabled: status != 'disabled',
         );
         expect(tester.takeException(), isNull, reason: name);
         await _capture(tester, visualDir!, name);
@@ -234,6 +286,9 @@ Future<void> _pumpCard(
   double textScale = 1,
   Locale locale = const Locale('en'),
   String networkName = 'office-net',
+  bool enabled = true,
+  VoidCallback? onSettings,
+  Widget? content,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -280,7 +335,12 @@ Future<void> _pumpCard(
             padding: const EdgeInsets.all(16),
             child: SizedBox(
               width: double.infinity,
-              child: EasyTierPeersCard(state: state, networkName: networkName),
+              child: content ?? EasyTierPeersCard(
+                state: state,
+                networkName: networkName,
+                enabled: enabled,
+                onSettings: onSettings ?? () {},
+              ),
             ),
           ),
         ),
@@ -304,4 +364,12 @@ Future<void> _capture(WidgetTester tester, String directory, String name) async 
     ).writeAsBytes(bytes.buffer.asUint8List());
     image.dispose();
   });
+}
+
+class _SettingsSetup extends SetupAction {
+  @override
+  void build() {}
+
+  @override
+  void applyProfileDebounce({bool silence = false, bool force = false}) {}
 }

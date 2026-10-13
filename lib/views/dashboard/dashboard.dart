@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'widgets/start_button.dart';
 import 'widgets/easytier_peers.dart';
+import '../config/easytier.dart';
 
 typedef _IsEditWidgetBuilder = Widget Function(bool isEdit);
 
@@ -267,11 +268,16 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (system.isOhos && easyTier.enable) ...[
+                if (system.isOhos) ...[
                   Consumer(
                     builder: (context, ref, child) => EasyTierPeersCard(
                       state: ref.watch(easyTierRoutesProvider),
                       networkName: easyTier.networkName,
+                      enabled: easyTier.enable,
+                      onSettings: () => BaseNavigator.push(
+                        context,
+                        const EasyTierPage(),
+                      ),
                     ),
                   ),
                   SizedBox(height: spacing),

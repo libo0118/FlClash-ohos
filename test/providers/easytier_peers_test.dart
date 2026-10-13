@@ -9,9 +9,11 @@ Map<String, Object?> telemetry(int revision, {String status = 'ready'}) => {
   'virtualIpv4': '10.126.126.159',
   'peers': [
     {'peerId': '42', 'hostname': 'office', 'ipv4': '10.126.126.42',
-      'connectionType': 'direct', 'latencyMs': 12.5, 'protocols': ['tcp']},
+      'connectionType': 'direct', 'latencyMs': 12.5, 'protocols': ['tcp'],
+      'connections': ['TCP 192.168.6.159:45000 → 192.168.6.183:11010']},
     {'peerId': '43', 'hostname': 'nas', 'ipv4': '10.126.126.43',
-      'connectionType': 'relay', 'latencyMs': 7, 'protocols': []},
+      'connectionType': 'relay', 'latencyMs': 7, 'protocols': [],
+      'connections': ['must not attribute a next-hop connection to a relayed peer']},
   ],
 };
 
@@ -26,6 +28,8 @@ void main() {
     expect(state.peers.first.latencyMs, 12.5);
     expect(state.peers.first.protocols, ['TCP']);
     expect(state.peers.last.latencyMs, isNull);
+    expect(state.peers.first.connections, ['TCP 192.168.6.159:45000 → 192.168.6.183:11010']);
+    expect(state.peers.last.connections, isEmpty);
     final changed = telemetry(2);
     ((changed['peers'] as List).first as Map)['latencyMs'] = 23.7;
     expect(routes.applySnapshot(changed), false);

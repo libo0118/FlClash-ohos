@@ -287,11 +287,22 @@ async function main() {
   native.collectRuntimeStateJson = () => JSON.stringify({ instances: [ready] })
   const successRows = []
   const successManager = manager(successRows)
+  let launchedConfig
+  native.runEmbeddedNetworkInstance = (config) => { launchedConfig = JSON.parse(config); return true }
   await successManager.start(props, {})
+  assert.equal(launchedConfig.disable_ipv6, true, 'old settings retain IPv4-only transport')
   assert.ok(successRows.some(({ message }) => message.includes('启动完成')))
   assert.equal(intervalCount(), 1)
   await successManager.stop()
   assert.equal(intervalCount(), 0)
+  await successManager.start({ ...props, ipv6: true }, {})
+  assert.equal(launchedConfig.disable_ipv6, false, 'independent EasyTier IPv6 toggle reaches the core')
+  assert.equal(launchedConfig.no_tun, true)
+  assert.deepEqual(launchedConfig.listener_urls, [])
+  await successManager.stop()
+  await successManager.start({ ...props, ipv6: false }, {})
+  assert.equal(launchedConfig.disable_ipv6, true, 'IPv6 can be switched back off')
+  await successManager.stop()
   const canceledManager = manager()
   native.collectRuntimeStateJson = () => JSON.stringify({ instances: [] })
   const canceledStart = canceledManager.start(props, {}).catch((failure) => failure)
@@ -339,7 +350,7 @@ async function main() {
     myNodeInfo: { virtualIpv4: '10.126.126.2', virtualIpv4Cidr: '10.126.126.2/24', peerId: 23 },
     peers: [
       { peerId: 7, conns: [
-        { peerId: 7, isClosed: false, tunnelType: 'tcp', stats: { latencyUs: 12500 }, remoteAddr: 'tcp://203.0.113.7:11010' },
+        { peerId: 7, isClosed: false, tunnelType: 'tcp', stats: { latencyUs: 12500 }, remoteAddr: 'tcp://wrong.invalid:11010', localAddr: 'tcp://192.168.6.159:45000', resolvedRemoteAddr: 'tcp://user:private@192.168.6.183:11010/?token=hidden' },
         { peerId: 7, isClosed: false, tunnelType: 'udp', stats: { latencyUs: 20000 } },
         { peerId: 7, isClosed: true, tunnelType: 'quic', stats: { latencyUs: 1 } },
       ] },
@@ -348,9 +359,9 @@ async function main() {
       { peerId: 99, conns: [{ peerId: 99, isClosed: false, tunnelType: 'tcp', stats: { latencyUs: 1000 } }] },
     ],
     routes: [
-      { peerId: 7, hostname: 'workstation', ipv4: '10.126.126.7', ipv4Cidr: '10.126.126.7/32', proxyCidrs: ['192.168.6.0/24', '2001:db8::/64'] },
+      { peerId: 7, cost: 1, hostname: 'workstation', ipv4: '10.126.126.7', ipv4Cidr: '10.126.126.7/32', proxyCidrs: ['192.168.6.0/24', '2001:db8::/64'] },
       { peerId: 8, hostname: 'relayed-node', ipv4: '10.126.126.8', ipv4Cidr: null, proxyCidrs: ['192.168.6.0/24'], nextHopPeerId: 7, cost: 2, pathLatency: 1000 },
-      { peerId: 9, hostname: 'no-measurement', ipv4: null, ipv4Cidr: null, proxyCidrs: [] },
+      { peerId: 9, cost: 1, hostname: 'no-measurement', ipv4: null, ipv4Cidr: null, proxyCidrs: [] },
       { peerId: 23, hostname: 'self', ipv4: '10.126.126.2', ipv4Cidr: '10.126.126.2/24', proxyCidrs: [] },
     ],
   }
@@ -372,10 +383,13 @@ async function main() {
   assert.equal(routes[1].peerStatus, 'ready')
   assert.equal(routes[1].virtualIpv4, '10.126.126.2')
   assert.deepEqual(routes[1].peers, [
-    { peerId: '7', hostname: 'workstation', ipv4: '10.126.126.7', connectionType: 'direct', latencyMs: 12.5, protocols: ['tcp', 'udp'] },
-    { peerId: '8', hostname: 'relayed-node', ipv4: '10.126.126.8', connectionType: 'relay', latencyMs: null, protocols: [] },
-    { peerId: '9', hostname: 'no-measurement', ipv4: null, connectionType: 'direct', latencyMs: null, protocols: [] },
+    { peerId: '7', hostname: 'workstation', ipv4: '10.126.126.7', connectionType: 'direct', latencyMs: 12.5, protocols: ['tcp', 'udp'], connections: ['TCP 192.168.6.159:45000 → 192.168.6.183:11010'] },
+    { peerId: '8', hostname: 'relayed-node', ipv4: '10.126.126.8', connectionType: 'relay', latencyMs: null, protocols: [], connections: [] },
+    { peerId: '9', hostname: 'no-measurement', ipv4: null, connectionType: 'direct', latencyMs: null, protocols: [], connections: [] },
   ], 'route-known peers exclude self and unrelated relay, and only direct target RTT is measured')
+  assert.equal(routeManager.socketAddress('tcp://[2001:db8::1]:11010/?token=hidden'), '[2001:db8::1]:11010')
+  assert.equal(routeManager.socketAddress('tcp://wrong.invalid:11010'), null)
+  assert.equal(routeManager.socketAddress('tcp://192.168.1.1:70000'), null)
   assert.deepEqual(routeEvents(routeRemote.calls), [routes[1]], 'full snapshots may coalesce while an earlier log RPC is in flight')
   assert.equal(intervalCount(), 1)
   const initialCidrs = routes[1].cidrs
@@ -450,6 +464,12 @@ async function main() {
   assert.equal(parsedPeers.peers[0].latencyMs, null)
   assert.equal(parsedPeers.peers[0].hostname.length, 128)
   noSecret(JSON.stringify(parsedPeers))
+  const multiHop = JSON.parse(JSON.stringify(routeInstance))
+  multiHop.routes[0].cost = 2
+  const viaRelay = routeManager.readPeerTelemetry(multiHop).peers[0]
+  assert.equal(viaRelay.connectionType, 'relay')
+  assert.equal(viaRelay.latencyMs, null)
+  assert.equal(viaRelay.connections.length, 0, 'a multi-hop route must not borrow a direct-connection endpoint')
   for (let i = 1; i < routes.length; ++i) assert.equal(routes[i].revision, routes[i - 1].revision + 1)
 
   // The latest route snapshot survives log backlog eviction and replays to a newly attached listener.

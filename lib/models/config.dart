@@ -106,6 +106,7 @@ abstract class AppSettingProps with _$AppSettingProps {
 abstract class EasyTierProps with _$EasyTierProps {
   const factory EasyTierProps({
     @Default(false) bool enable,
+    @Default(false) bool ipv6,
     @Default('') String networkName,
     @Default('') String networkSecret,
     @Default([]) List<String> peerUrls,

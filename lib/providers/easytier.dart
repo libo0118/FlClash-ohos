@@ -11,6 +11,7 @@ class EasyTierPeer {
   final String connectionType;
   final double? latencyMs;
   final List<String> protocols;
+  final List<String> connections;
 
   const EasyTierPeer({
     required this.peerId,
@@ -19,6 +20,7 @@ class EasyTierPeer {
     required this.connectionType,
     required this.latencyMs,
     this.protocols = const [],
+    this.connections = const [],
   });
 }
 
@@ -157,6 +159,7 @@ class EasyTierRoutes extends Notifier<EasyTierRoutesState> {
       final name = raw['hostname'];
       final type = raw['connectionType'];
       final protocols = raw['protocols'];
+      final connections = raw['connections'] ?? const [];
       final latency = raw['latencyMs'];
       if (id is! String || !RegExp(r'^\d{1,10}$').hasMatch(id) ||
           int.parse(id) > 0xffffffff || !ids.add(id) ||
@@ -164,6 +167,8 @@ class EasyTierRoutes extends Notifier<EasyTierRoutesState> {
           !{'direct', 'relay'}.contains(type) ||
           protocols is! List || protocols.length > 16 ||
           protocols.any((value) => value is! String || value.length > 16) ||
+          connections is! List || connections.length > 4 ||
+          connections.any((value) => value is! String || value.length > 160) ||
           (raw['ipv4'] != null && _ipv4(raw['ipv4']) == null)) {
         return EasyTierRoutesState(peerStatus: 'unavailable');
       }
@@ -178,6 +183,8 @@ class EasyTierRoutes extends Notifier<EasyTierRoutesState> {
           (value) => {'tcp', 'udp', 'ws', 'wss', 'quic', 'wg', 'faketcp', 'ring', 'unix'}
               .contains(value.toLowerCase()),
         ).map((value) => value.toUpperCase())),
+        connections: type == 'direct' ? List.unmodifiable(connections.cast<String>()
+            .map((value) => value.replaceAll(RegExp(r'[\x00-\x1f\x7f\u202a-\u202e\u2066-\u2069]'), ''))) : const [],
       ));
     }
     if (snapshot['virtualIpv4'] != null && _ipv4(snapshot['virtualIpv4']) == null) {

@@ -12,6 +12,7 @@ String easyTierRouteConfigTag(EasyTierProps props) => sha256.convert(
     props.networkName,
     props.networkSecret,
     props.peerUrls,
+    props.ipv6,
   ])),
 ).toString();
 

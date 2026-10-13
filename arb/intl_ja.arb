@@ -1,4 +1,8 @@
 {
+  "easyTierConnectionAddresses": "接続アドレス（ローカル → リモート）",
+  "easyTierIpv6": "EasyTier IPv6",
+  "easyTierIpv6Description": "EasyTier の IPv6 接続を許可します。FlClash の IPv6 設定とは独立しています。VPN を停止して変更し、再起動してください。",
+  "easyTierDashboardDisabled": "タップして設定・有効化",
   "easyTierPeersRunning": "稼働中",
   "easyTierPeersStarting": "接続中",
   "easyTierPeersStopped": "停止中",

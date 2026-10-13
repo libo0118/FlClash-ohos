@@ -15,6 +15,7 @@ export class AccessControlProps {
 
 export class EasyTierProps {
   enable: boolean = false
+  ipv6: boolean = false
   networkName: string = ''
   networkSecret: string = ''
   peerUrls: string[] = []

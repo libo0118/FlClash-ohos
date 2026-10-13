@@ -1,4 +1,8 @@
 {
+  "easyTierConnectionAddresses": "Connection addresses (local → remote)",
+  "easyTierIpv6": "EasyTier IPv6",
+  "easyTierIpv6Description": "Allow EasyTier to connect to peers over IPv6, independently of FlClash IPv6. Stop the VPN to change this setting, then restart.",
+  "easyTierDashboardDisabled": "Set up and enable EasyTier",
   "easyTierPeersRunning": "Running",
   "easyTierPeersStarting": "Connecting",
   "easyTierPeersStopped": "Stopped",
