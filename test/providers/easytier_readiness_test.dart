@@ -92,7 +92,8 @@ class _QueuedSetupAction extends SetupAction {
   @override
   void build() {
     super.build();
-    ref.onDispose(queue.dispose);
+    // Create the queue inside testWidgets' fake clock, not in setUp.
+    ref.onDispose(() => queue.dispose());
   }
 
   void receiveRoutes(int next) {
