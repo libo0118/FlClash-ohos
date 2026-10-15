@@ -150,10 +150,15 @@ class SetupAction extends _$SetupAction {
 
   @override
   void build() {
+    ref.listen(initProvider, (_, ready) {
+      if (ready) resumeEasyTierRouteRefresh();
+    });
     ref.onDispose(() => _profileUpdates.dispose());
   }
 
   void refreshEasyTierRoutes() => _profileUpdates.requestRefresh();
+
+  void resumeEasyTierRouteRefresh() => _profileUpdates.resumeRefresh();
 
   SetupParams get _setupParams {
     final selectedMap = ref.read(selectedMapProvider);
@@ -203,7 +208,7 @@ class SetupAction extends _$SetupAction {
       rethrow;
     } finally {
       _startingListener = false;
-      _profileUpdates.resumeRefresh();
+      resumeEasyTierRouteRefresh();
     }
   }
 
@@ -253,7 +258,7 @@ class SetupAction extends _$SetupAction {
     if (isStart) {
       ref.read(logsProvider.notifier).add(
         Log.app(
-          '[STARTUP] ET-LOG-20261013-6 start requested; '
+          '[STARTUP] ET-LOG-20261015-1 start requested; '
           'isInit=$isInit, initialized=${ref.read(initProvider)}, '
           'easyTier=${ref.read(appSettingProvider).easyTier.enable}, '
           'mixedPort=${ref.read(patchClashConfigProvider).mixedPort}',
