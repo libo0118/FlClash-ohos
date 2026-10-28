@@ -90,14 +90,15 @@ EasyTierRoutesState _state({
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  final fontPath = Platform.environment['EASYTIER_TEST_FONT'];
+  final fontPath =
+      Platform.environment['EASYTIER_TEST_FONT'] ??
+      'assets/fonts/JetBrainsMono-Regular.ttf';
   final visualDir = Platform.environment['EASYTIER_VISUAL_DIR'];
 
   setUpAll(() async {
     final directory = await Directory.systemTemp.createTemp('easytier_widgets');
     addTearDown(() => directory.delete(recursive: true));
     await useAppPaths(directory);
-    if (fontPath == null || fontPath.isEmpty) return;
     final loader = FontLoader('EasyTierTestCjk');
     loader.addFont(
       File(fontPath).readAsBytes().then((bytes) => ByteData.sublistView(bytes)),
@@ -335,7 +336,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('320 dp enlarged text wraps names, IPs, endpoints and status', (
+  testWidgets('320 dp enlarged text wraps names, endpoints and status', (
     tester,
   ) async {
     const longName =
@@ -375,6 +376,44 @@ void main() {
     );
     expect(find.byKey(_entryKey), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('enlarged peer IPv4 stays on one full-width selectable line', (
+    tester,
+  ) async {
+    final peer = _nodes()[2];
+    for (final width in [320.0, 390.0, 960.0]) {
+      await _pumpDetails(
+        tester,
+        _state(peers: [peer]),
+        size: Size(width, 1200),
+        textScale: 1.6,
+      );
+      final address = _selectable(peer.ipv4!);
+      final editable = tester
+          .state<EditableTextState>(
+            find.descendant(of: address, matching: find.byType(EditableText)),
+          )
+          .renderEditable;
+      expect(
+        editable.getBoxesForSelection(
+          TextSelection(baseOffset: 0, extentOffset: peer.ipv4!.length),
+        ),
+        hasLength(1),
+        reason: '$width dp must keep every IPv4 digit on the same line',
+      );
+      final addressRect = tester.getRect(address);
+      final cardRect = tester.getRect(
+        find.byKey(ValueKey('easytier-peer-${peer.peerId}')),
+      );
+      expect(addressRect.left, closeTo(cardRect.left + 16, 0.01));
+      expect(addressRect.right, closeTo(cardRect.right - 16, 0.01));
+      expect(
+        addressRect.top,
+        greaterThanOrEqualTo(tester.getBottomLeft(find.text('2.6 ms')).dy),
+      );
+      expect(tester.takeException(), isNull, reason: '$width dp');
+    }
   });
 
   testWidgets('compact entry follows the saved cards in the real dashboard', (
@@ -739,9 +778,7 @@ Future<void> _pumpApp(
         seedColor: const Color(defaultPrimaryColor),
         brightness: brightness,
       ),
-      fontFamily: Platform.environment['EASYTIER_TEST_FONT'] == null
-          ? null
-          : 'EasyTierTestCjk',
+      fontFamily: 'EasyTierTestCjk',
     ).withAppShapes.withAppSurfaces.withAppTypography,
     appBuilder: (context, child) => RepaintBoundary(
       key: _captureKey,

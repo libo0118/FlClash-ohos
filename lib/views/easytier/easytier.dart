@@ -224,23 +224,11 @@ class _EasyTierPeerCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SelectableText(
-                        peer.hostname.isNotEmpty
-                            ? peer.hostname
-                            : l10n.easyTierPeerUnnamed(peer.peerId),
-                        style: AppTextStyle.headline.of(context),
-                      ),
-                      const SizedBox(height: 4),
-                      SelectableText(
-                        peer.ipv4 ?? l10n.easyTierPeerNoIpv4,
-                        style: secondaryStyle.copyWith(
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                    ],
+                  child: SelectableText(
+                    peer.hostname.isNotEmpty
+                        ? peer.hostname
+                        : l10n.easyTierPeerUnnamed(peer.peerId),
+                    style: AppTextStyle.headline.of(context),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -260,6 +248,13 @@ class _EasyTierPeerCard extends StatelessWidget {
                   ],
                 ),
               ],
+            ),
+            const SizedBox(height: 4),
+            SelectableText(
+              peer.ipv4 ?? l10n.easyTierPeerNoIpv4,
+              style: secondaryStyle.copyWith(
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
             const SizedBox(height: 12),
             Wrap(
