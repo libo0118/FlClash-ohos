@@ -156,4 +156,4 @@ godebug (
 	x509negativeserial=1
 )
 
-replace github.com/metacubex/gvisor => github.com/tljk/gvisor-ohos v0.0.0-20260909094018-132a468703a6
+replace github.com/metacubex/gvisor => github.com/tljk/gvisor-ohos v0.0.0-20261024090803-431429b56e2c

@@ -164,7 +164,7 @@ jobs:
         env:
           CGO_ENABLED: '0'
           GOTOOLCHAIN: local
-        run: go test -count=1 -mod=readonly .
+        run: go test -count=1 -mod=readonly -tags=with_gvisor .
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: plugins/rust_api/rust
