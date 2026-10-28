@@ -122,6 +122,11 @@ const bootRecordKey = 'boot_record';
 const appliedConfigMd5Key = 'applied_config_md5';
 const defaultSystemDnsFallback = '223.5.5.5';
 const repository = 'tljk/FlClash-ohos';
+final updateRepository = updateRepositoryFor(Platform.operatingSystem);
+
+String updateRepositoryFor(String operatingSystem) =>
+    operatingSystem == 'ohos' ? 'libo0118/FlClash-ohos' : repository;
+
 const maxMobileWidth = 600;
 const maxLaptopWidth = 840;
 const defaultTestUrl = 'https://www.gstatic.com/generate_204';

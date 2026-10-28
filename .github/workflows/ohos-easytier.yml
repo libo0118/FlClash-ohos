@@ -331,7 +331,7 @@ jobs:
           FLCLASH_OHOS_BUILD: '1'
         run: |
           yq -i '.hooks.user_defines.setup.build_assets = false' pubspec.yaml
-          dart setup.dart ohos -v
+          dart setup.dart ohos --env stable -v
           test -n "$(find dist -type f \( -name '*.hap' -o -name '*.app' \) -print -quit)"
           printf 'FlClash: %s\nEasyTier: %s\nSigning: unsigned\n' "$GITHUB_SHA" "$EASYTIER_REF" > dist/build-source.txt
       - uses: actions/upload-artifact@v4

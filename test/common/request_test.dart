@@ -5,8 +5,10 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:fl_clash/common/constant.dart';
+import 'package:fl_clash/common/package.dart';
 import 'package:fl_clash/common/request.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class _StalledHttpClient extends Fake implements HttpClient {
   @override
@@ -31,6 +33,12 @@ class _HostAdapter implements HttpClientAdapter {
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) async {
+    expect(
+      options.uri.path,
+      options.uri.host == 'api.github.com'
+          ? '/repos/$updateRepository/releases/latest'
+          : '/$updateRepository/releases/latest',
+    );
     return byHost[options.uri.host]!();
   }
 
@@ -70,6 +78,45 @@ void main() {
   });
 
   group('latestRelease', () {
+    test('OHOS updates come from the EasyTier fork', () {
+      expect(updateRepositoryFor('ohos'), 'libo0118/FlClash-ohos');
+    });
+
+    test('other platforms keep their existing update repository', () {
+      for (final platform in ['android', 'ios', 'linux', 'macos', 'windows']) {
+        expect(updateRepositoryFor(platform), repository, reason: platform);
+      }
+    });
+
+    final packageInfo = PackageInfo(
+      appName: 'FlClash',
+      packageName: 'com.follow.clash',
+      version: '0.9.2',
+      buildNumber: '2026102803',
+    );
+
+    test('the current OHOS build does not offer itself as an update', () {
+      final version = packageInfo.updateVersionFor('ohos');
+
+      expect(compareVersions('0.9.2+2026102803', version), 0);
+    });
+
+    test('the next OHOS build is an update', () {
+      final version = packageInfo.updateVersionFor('ohos');
+
+      expect(compareVersions('0.9.2+2026102804', version), greaterThan(0));
+    });
+
+    test('other platforms retain their version comparison', () {
+      for (final platform in ['android', 'ios', 'linux', 'macos', 'windows']) {
+        expect(
+          packageInfo.updateVersionFor(platform),
+          '0.9.2',
+          reason: platform,
+        );
+      }
+    });
+
     Request requestAnswering(Map<String, ResponseBody Function()> byHost) {
       return Request()..dio.httpClientAdapter = _HostAdapter(byHost);
     }
