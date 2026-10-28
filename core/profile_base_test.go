@@ -196,6 +196,48 @@ func TestLoadConfigWithBasePutsTheAddedRulesFirstAndTheOverlayOverTheRest(t *tes
 	}
 }
 
+func TestEasyTierInjectedProxyRequiresTheCompleteProfile(t *testing.T) {
+	path := writeBaseProfile(t, baseProfile)
+	base, err := handleGetProfileBase(path)
+	if err != nil {
+		t.Fatalf("handleGetProfileBase = %v", err)
+	}
+	const proxyName = "__FlClash_EasyTier__"
+	overlay := overlayOf(t, base, []string{"IP-CIDR,10.126.126.0/24," + proxyName + ",no-resolve"}, map[string]any{
+		"proxies": []map[string]any{{
+			"name": proxyName, "type": "socks5", "server": "127.0.0.1", "port": 17890, "udp": true,
+		}},
+	})
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+
+	_, err = loadConfigWithBase(&SetupBase{Path: path, Overlay: overlay}, configPath)
+	want := "rules[0] [IP-CIDR,10.126.126.0/24," + proxyName + ",no-resolve] error: proxy [" + proxyName + "] not found"
+	if err == nil || err.Error() != want {
+		t.Fatalf("base overlay = %v, want %s", err, want)
+	}
+
+	cfg, err := loadConfig(filepath.Join("..", "test", "fixtures", "easytier_profile.yaml"))
+	if err != nil {
+		t.Fatalf("load complete Dart profile fixture = %v", err)
+	}
+	for _, name := range []string{"a", "Proxy", proxyName, proxyName + "_"} {
+		if cfg.Proxies[name] == nil {
+			t.Errorf("proxy %s is missing", name)
+		}
+	}
+	if len(cfg.Rules) != 3 {
+		t.Fatalf("rules = %v, want two EasyTier routes before the subscription", ruleStrings(cfg))
+	}
+	for index, cidr := range []string{"10.126.126.0/24", "192.168.6.0/24"} {
+		if rule := cfg.Rules[index]; rule.Payload() != cidr || rule.Adapter() != proxyName+"_" {
+			t.Errorf("route %d = %s,%s, want %s,%s_", index, rule.Payload(), rule.Adapter(), cidr, proxyName)
+		}
+	}
+	if cfg.Rules[2].Adapter() != "Proxy" {
+		t.Errorf("last rule = %v, want the subscription's match target", cfg.Rules[2])
+	}
+}
+
 // The Android service and mihomo's controller reload config.yaml without the
 // profile, and the anchor it was written with sits in a section the overlay drops.
 func TestLoadConfigWithBaseWritesAConfigThatLoadsAlone(t *testing.T) {

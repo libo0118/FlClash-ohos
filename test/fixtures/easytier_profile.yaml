@@ -1,0 +1,11 @@
+mode: rule
+proxies:
+  - {name: a, type: socks5, server: 127.0.0.1, port: 1080}
+  - {name: __FlClash_EasyTier__, type: socks5, server: 127.0.0.1, port: 1081}
+  - {name: __FlClash_EasyTier___, type: socks5, server: 127.0.0.1, port: 17890, udp: true}
+proxy-groups:
+  - {name: Proxy, type: select, proxies: [a]}
+rules:
+  - IP-CIDR,10.126.126.0/24,__FlClash_EasyTier___,no-resolve
+  - IP-CIDR,192.168.6.0/24,__FlClash_EasyTier___,no-resolve
+  - MATCH,Proxy

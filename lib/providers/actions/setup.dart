@@ -545,6 +545,12 @@ class SetupAction extends _$SetupAction {
     }
   }
 
+  @visibleForTesting
+  EasyTierProps get profileEasyTier =>
+      system.isOhos && !ref.read(safeModeProvider)
+      ? ref.read(appSettingProvider).easyTier
+      : const EasyTierProps();
+
   /// With a base, [BuiltProfile.yaml] is only the overlay the Core applies.
   Future<BuiltProfile> getProfile({
     required SetupState setupState,
@@ -571,7 +577,9 @@ class SetupAction extends _$SetupAction {
         ? await setupState.script?.content
         : null;
     final hasScript = scriptContent?.isNotEmpty == true;
-    final profileBase = !isCustom && !hasScript
+    final easyTier = profileEasyTier;
+    // The base merge replaces overlay proxies and would drop EasyTier's proxy.
+    final profileBase = !isCustom && !hasScript && !easyTier.enable
         ? await _core.getProfileBase(profileId)
         : null;
     Map<String, dynamic> rawConfig = isCustom
@@ -617,9 +625,7 @@ class SetupAction extends _$SetupAction {
             ? setupState.matchTarget
             : lastMatchTarget(profileBase.base.matchRules),
         safeMode: ref.read(safeModeProvider),
-        easyTier: system.isOhos && !ref.read(safeModeProvider)
-            ? ref.read(appSettingProvider).easyTier
-            : const EasyTierProps(),
+        easyTier: easyTier,
         easyTierLearnedCidrs: ref.read(easyTierRoutesProvider).activeCidrs,
         easyTierBlockedCidrs: ref.read(easyTierRoutesProvider).blockedCidrs,
       ),

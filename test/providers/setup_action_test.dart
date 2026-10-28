@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:fl_clash/common/common.dart';
+import 'package:fl_clash/common/easytier.dart';
 import 'package:fl_clash/core/controller.dart';
 import 'package:fl_clash/core/interface.dart';
 import 'package:fl_clash/core/method.dart';
@@ -14,6 +15,7 @@ import 'package:fl_clash/providers/app.dart';
 import 'package:fl_clash/providers/config.dart';
 import 'package:fl_clash/providers/core.dart';
 import 'package:fl_clash/providers/database.dart';
+import 'package:fl_clash/providers/easytier.dart';
 import 'package:fl_clash/providers/state.dart';
 import 'package:fl_clash/state.dart';
 import 'package:flutter/scheduler.dart';
@@ -30,6 +32,11 @@ import '../helpers/preferences.dart';
 import '../helpers/test_profiles.dart';
 
 class _MockCoreHandlerInterface extends Mock implements CoreHandlerInterface {}
+
+class _EasyTierSetupAction extends SetupAction {
+  @override
+  EasyTierProps get profileEasyTier => ref.read(appSettingProvider).easyTier;
+}
 
 // checkAndUpdateAndCopy checks the file system before it refreshes, so its
 // failure tests need appPath to resolve to a real, writable directory.
@@ -1555,6 +1562,136 @@ void main() {
       expect(await setupAction.applyProfile(), isFalse);
       expect(globalState.lastConfigCounts, (groups: 0, proxies: 0, rules: 0));
     });
+
+    test(
+      'EasyTier applies the complete profile on initial setup and route '
+      'reapply, preserving subscription proxies and name collisions',
+      () async {
+        final profile = Profile.normal(label: 'p');
+        final core = _MockCoreHandlerInterface();
+        when(() => core.getExternalProviders()).thenAnswer((_) async => []);
+        when(
+          () => core.getProxies(),
+        ).thenAnswer((_) async => const ProxiesData(proxies: {}, all: []));
+        const subscriptionProxies = [
+          {'name': 'a', 'type': 'socks5', 'server': '127.0.0.1', 'port': 1080},
+          {
+            'name': easyTierProxyName,
+            'type': 'socks5',
+            'server': '127.0.0.1',
+            'port': 1081,
+          },
+        ];
+        const subscriptionGroups = [
+          {
+            'name': 'Proxy',
+            'type': 'select',
+            'proxies': ['a'],
+          },
+        ];
+        when(() => core.getProfileBase(any())).thenAnswer(
+          (_) async => const ProfileBase(config: {}, digest: 'd', proxies: 2),
+        );
+        when(() => core.getConfig(any())).thenAnswer(
+          (_) async => {
+            'proxies': subscriptionProxies,
+            'proxy-groups': subscriptionGroups,
+            'rule': ['MATCH,Proxy'],
+          },
+        );
+        final pushed = <SetupParams>[];
+        final configs = <YamlMap>[];
+        when(() => core.setupConfig(any())).thenAnswer((invocation) async {
+          final params = invocation.positionalArguments.single as SetupParams;
+          pushed.add(params);
+          configs.add(
+            loadYaml(
+                  params.base?.overlay ??
+                      await File(await appPath.configFilePath).readAsString(),
+                )
+                as YamlMap,
+          );
+          return '';
+        });
+        final scoped = ProviderContainer(
+          overrides: [
+            profilesProvider.overrideWith(() => TestProfiles([profile])),
+            currentProfileIdProvider.overrideWithBuild((_, _) => profile.id),
+            appSettingProvider.overrideWithBuild(
+              (_, _) => const AppSettingProps(
+                easyTier: EasyTierProps(
+                  enable: true,
+                  networkName: 'test',
+                  networkSecret: 'test-secret',
+                  peerUrls: ['tcp://127.0.0.1:11010'],
+                  cidrs: ['10.126.126.0/24'],
+                ),
+              ),
+            ),
+            setupStateProvider.overrideWith(
+              (_, profileId) =>
+                  nullProfileSetupState.copyWith(profileId: profileId),
+            ),
+            coreHandlerProvider.overrideWithValue(CoreController.scoped(core)),
+            setupActionProvider.overrideWith(_EasyTierSetupAction.new),
+          ],
+        );
+        addTearDown(scoped.dispose);
+        addTearDown(() => globalState.lastConfigCounts = null);
+        final setupAction = scoped.read(setupActionProvider.notifier);
+
+        expect(await setupAction.applyProfile(force: true), isTrue);
+        scoped.read(easyTierRoutesProvider.notifier).applySnapshot({
+          'sessionId': 'test-session',
+          'revision': 1,
+          'status': 'ready',
+          'cidrs': ['10.126.126.0/24', '192.168.6.0/24'],
+        });
+        expect(
+          await setupAction.applyProfile(force: true, silence: true),
+          isTrue,
+        );
+
+        expect(pushed, hasLength(2));
+        expect(pushed.map((params) => params.base == null), [true, true]);
+        for (final config in configs) {
+          expect(config['mode'], 'rule');
+          expect(config['proxy-groups'], subscriptionGroups);
+          expect(config['proxies'], [
+            ...subscriptionProxies,
+            {
+              'name': '${easyTierProxyName}_',
+              'type': 'socks5',
+              'server': '127.0.0.1',
+              'port': easyTierSocksPort,
+              'udp': true,
+            },
+          ]);
+          expect(config['rules'].last, 'MATCH,Proxy');
+        }
+        expect(configs.first['rules'], [
+          'IP-CIDR,10.126.126.0/24,${easyTierProxyName}_,no-resolve',
+          'MATCH,Proxy',
+        ]);
+        expect(configs.last['rules'], [
+          'IP-CIDR,10.126.126.0/24,${easyTierProxyName}_,no-resolve',
+          'IP-CIDR,192.168.6.0/24,${easyTierProxyName}_,no-resolve',
+          'MATCH,Proxy',
+        ]);
+        final coreFixture =
+            loadYaml(
+                  await File(
+                    'test/fixtures/easytier_profile.yaml',
+                  ).readAsString(),
+                )
+                as YamlMap;
+        for (final section in ['mode', 'proxies', 'proxy-groups', 'rules']) {
+          expect(configs.last[section], coreFixture[section], reason: section);
+        }
+        verify(() => core.getConfig(any())).called(2);
+        verifyNever(() => core.getProfileBase(any()));
+      },
+    );
 
     test('the preview shows the config the Core merges', () async {
       final profile = Profile.normal(label: 'p');
