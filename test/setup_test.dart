@@ -47,6 +47,47 @@ void main() {
       ]);
     });
 
+    test('pins the OHOS distributor that packages unsigned HAP and APP', () {
+      expect(setup.createDistributorActivateArgs('ohos'), [
+        'pub',
+        'global',
+        'activate',
+        '-s',
+        'git',
+        'https://github.com/tljk/flutter_distributor.git',
+        '--git-ref',
+        '71966a102e6a283a14c6e953e98f9d39008efb8a',
+        '--git-path',
+        'packages/flutter_distributor',
+      ]);
+    });
+
+    test('keeps the upstream distributor for other platforms', () {
+      for (final platform in ['android', 'linux', 'macos', 'windows']) {
+        expect(setup.createDistributorActivateArgs(platform), [
+          'pub',
+          'global',
+          'activate',
+          '-s',
+          'git',
+          'https://github.com/chen08209/flutter_distributor.git',
+          '--git-ref',
+          'v0.6.11-flclash.4',
+          '--git-path',
+          'packages/flutter_distributor',
+        ], reason: platform);
+      }
+    });
+
+    test('builds unsigned OHOS HAP and APP with verbose output', () {
+      expect(setup.createFlutterBuildArgs(platform: 'ohos', verbose: true), [
+        'verbose',
+        'dart-define-from-file=env.json',
+        'no-codesign',
+      ]);
+      expect(setup.createPackageTargets('ohos', null), 'hap,app');
+    });
+
     test('allows only the separately built OHOS setup hook to be skipped', () {
       const pubspec = '''
 hooks:

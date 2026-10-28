@@ -133,6 +133,25 @@ Map<String, String> createBuildEnvironment(String env) {
   return {'APP_ENV': env};
 }
 
+List<String> createDistributorActivateArgs(String platform) {
+  final isOhos = platform == 'ohos';
+  return [
+    'pub',
+    'global',
+    'activate',
+    '-s',
+    'git',
+    isOhos
+        ? 'https://github.com/tljk/flutter_distributor.git'
+        : 'https://github.com/chen08209/flutter_distributor.git',
+    '--git-ref',
+    // The OHOS fork resolves unsigned HAP/APP outputs from --no-codesign.
+    isOhos ? '71966a102e6a283a14c6e953e98f9d39008efb8a' : 'v0.6.11-flclash.4',
+    '--git-path',
+    'packages/flutter_distributor',
+  ];
+}
+
 /// Disabled build hooks that leave required native assets unbuilt.
 List<String> packagesNotBuildingAssets(
   String pubspec, {
@@ -190,18 +209,10 @@ Future<int> _package(
   final depExit = await _ensureDependencies(platform);
   if (depExit != 0) return depExit;
 
-  final activateResult = await Process.run('dart', [
-    'pub',
-    'global',
-    'activate',
-    '-s',
-    'git',
-    'https://github.com/tljk/flutter_distributor.git',
-    '--git-ref',
-    'v0.6.11-flclash.4',
-    '--git-path',
-    'packages/flutter_distributor',
-  ]);
+  final activateResult = await Process.run(
+    'dart',
+    createDistributorActivateArgs(platform),
+  );
   if (activateResult.exitCode != 0) {
     stderr.write(activateResult.stderr);
     return activateResult.exitCode;
