@@ -299,7 +299,7 @@ jobs:
         with:
           go-version: '1.27.3'
           cache-dependency-path: core/go.sum
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
         id: ohos-go
         with:
           path: ${{ runner.tool_cache }}/ohos-go-1.27.3
@@ -307,18 +307,25 @@ jobs:
       - name: Setup OpenHarmony Go
         run: |
           bash .github/setup-ohos-go.sh "$RUNNER_TOOL_CACHE/ohos-go-1.27.3"
+      - name: Save the validated OpenHarmony Go toolchain
+        if: steps.ohos-go.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.tool_cache }}/ohos-go-1.27.3
+          key: ${{ steps.ohos-go.outputs.cache-primary-key }}
       - name: Compile the OHOS C shared core
         run: node plugins/setup/buildkit/build_ohos.cjs
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: plugins/rust_api/rust
+          cache-on-failure: true
       - name: Prepare the Rust OHOS target
         run: |
           sudo apt-get install -qqy libclang-dev llvm-dev
           export LIBCLANG_PATH="$(llvm-config --libdir)"
           python3 -c 'import ctypes, os; ctypes.CDLL(os.path.join(os.environ["LIBCLANG_PATH"], "libclang.so"))'
           echo "LIBCLANG_PATH=$LIBCLANG_PATH" >> "$GITHUB_ENV"
-          rustup toolchain install 1.99.0 --profile minimal --target aarch64-unknown-linux-ohos
+          rustup toolchain install 1.99.0 --profile minimal --target aarch64-unknown-linux-ohos --component rustfmt
       - name: Build one unsigned HarmonyOS app
         env:
           FLCLASH_OHOS_BUILD: '1'

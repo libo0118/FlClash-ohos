@@ -172,7 +172,6 @@ void main() {
       'AR_aarch64_unknown_linux_ohos': File.fromUri(
         compiler.uri.resolve('llvm-ar'),
       ).path,
-      'CFLAGS_aarch64_unknown_linux_ohos': flags,
       'LIBCLANG_PATH': libclang.path,
       'BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_linux_ohos': flags,
     });
@@ -204,6 +203,32 @@ void main() {
       () => ohosBuildEnvironment(compiler.uri, {'LIBCLANG_PATH': root.path}),
       throwsStateError,
     );
+  });
+
+  test('cc-rs keeps the compiler wrapper sysroot without literal quotes', () {
+    final compiler = sdkCompiler();
+    prepareLinker(compiler);
+    prepareLibclang(
+      Directory.fromUri(compiler.parent.parent.uri.resolve('lib/')),
+    );
+    final environment = ohosBuildEnvironment(compiler.uri, const {});
+    final sysroot = Directory.fromUri(
+      compiler.parent.parent.parent.uri.resolve('sysroot/'),
+    );
+    // cc-rs splits CFLAGS on whitespace, preserving the quotes seen in CI.
+    final arguments = [
+      '--sysroot=${sysroot.path}',
+      ...?environment['CFLAGS_aarch64_unknown_linux_ohos']?.split(
+        RegExp(r'\s+'),
+      ),
+    ];
+    expect(
+      arguments.lastWhere((argument) => argument.startsWith('--sysroot=')),
+      '--sysroot=${sysroot.path}',
+    );
+    expect(environment.keys, isNot(contains('CFLAGS')));
+    expect(environment.keys, isNot(contains('CC')));
+    expect(environment.keys, isNot(contains('TARGET_CFLAGS')));
   });
 
   test('the SDK BuildInput selects OHOS even when targetOS is Linux', () async {

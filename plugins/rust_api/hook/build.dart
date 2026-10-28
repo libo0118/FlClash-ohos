@@ -91,13 +91,13 @@ Map<String, String> ohosBuildEnvironment(
   final clangArgs = '--target=aarch64-linux-ohos --sysroot="${sysroot.path}"';
   return {
     'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_OHOS_LINKER': linker.path,
+    // The wrapper owns cc-rs' sysroot; quoted CFLAGS reach clang literally.
     'CC_aarch64_unknown_linux_ohos': linker.path,
     'AR_aarch64_unknown_linux_ohos': File.fromUri(
       compiler.resolve(
         'llvm-ar${compiler.path.endsWith('.exe') ? '.exe' : ''}',
       ),
     ).path,
-    'CFLAGS_aarch64_unknown_linux_ohos': clangArgs,
     'LIBCLANG_PATH': libclang.path,
     'BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_linux_ohos': clangArgs,
   };
