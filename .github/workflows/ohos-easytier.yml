@@ -181,6 +181,11 @@ jobs:
           echo "$RUNNER_TOOL_CACHE/flutter-ohos/bin/cache/dart-sdk/bin" >> "$GITHUB_PATH"
           echo "PUB_CACHE=$HOME/.pub-cache" >> "$GITHUB_ENV"
           echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: ${{ runner.os }}-ohos-pub-${{ env.FLUTTER_REF }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: ${{ runner.os }}-ohos-pub-${{ env.FLUTTER_REF }}-
       - run: flutter pub get
       - name: Patch UI dependencies for OpenHarmony
         run: node .github/patch-ui-ohos.cjs
@@ -264,6 +269,11 @@ jobs:
         with:
           name: flclash-checked-sources
           path: ${{ runner.temp }}/checked-sources
+      - uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: ${{ runner.os }}-ohos-pub-${{ env.FLUTTER_REF }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: ${{ runner.os }}-ohos-pub-${{ env.FLUTTER_REF }}-
       - name: Restore the tested generated sources
         run: |
           cp "$RUNNER_TEMP/checked-sources/pubspec.lock" pubspec.lock
