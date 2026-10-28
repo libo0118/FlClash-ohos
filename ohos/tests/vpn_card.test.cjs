@@ -10,6 +10,7 @@ const updates = []
 const commands = []
 let token = 0
 class Channel {
+  constructor(_messenger, name) { this.name = name }
   setMethodCallHandler(handler) { this.handler = handler }
   invokeMethod(method, data) { commands.push({ method, data }) }
 }
@@ -70,6 +71,20 @@ async function main() {
   assert.equal(updates.length, 2)
   assert.ok(updates.every(({ data }) => data.vpnStatus === 'connected' && data.controlReady && data.profileName === 'My profile' && data.easyTierEnabled))
   assert.ok(![...files.values()].join('').includes('networkSecret'))
+  assert.equal(updates.at(-1).data.easyTierStatus, 'unknown', 'enabled is not proof of overlay connectivity')
+  manager.publish('starting')
+  manager.setEasyTierStatus('ready')
+  assert.equal(updates.at(-1).data.easyTierStatus, 'ready', 'a real route/peer snapshot can become ready during startup')
+  assert.equal(updates.at(-1).data.vpnStatus, 'starting', 'overlay readiness does not complete VPN startup')
+  manager.setEasyTierStatus('unavailable')
+  assert.equal(updates.at(-1).data.easyTierStatus, 'unavailable')
+  manager.publish('stopped')
+  assert.equal(updates.at(-1).data.easyTierStatus, 'stopped')
+  manager.updateSummary('My profile', false)
+  manager.setEasyTierStatus('ready')
+  assert.equal(updates.at(-1).data.easyTierStatus, 'disabled')
+  manager.updateSummary('My profile', true)
+  manager.publish('connected')
   // A removed form cannot retain authority to toggle the VPN.
   manager.remove('10002')
   assert.equal(manager.accepts({ formId: '10002', token: second.cardToken }), false)
@@ -94,6 +109,17 @@ async function main() {
   entry.handleGetRunTime = async () => 0
   const plugin = new subject.ServicePlugin(entry)
   plugin.onAttachedToEngine({ getBinaryMessenger() {} })
+  assert.equal(plugin.coreChannel.name, 'com.follow.clash/core')
+  assert.equal(plugin.coreChannel.handler, plugin)
+  let coreReply
+  entry.handleInvokeMethod = async (request, stub) => {
+    assert.deepEqual(JSON.parse(request), { id: '1', method: 'getIsInit', arguments: null })
+    stub.onResult(JSON.stringify({ id: '1', result: true }))
+  }
+  plugin.onMethodCall({ method: 'invokeMethod', args: JSON.stringify({ id: '1', method: 'getIsInit', arguments: null }) }, {
+    success(value) { coreReply = JSON.parse(value) },
+  })
+  assert.deepEqual(coreReply, { id: '1', result: true })
   // Cold router intent waits for the real Dart initProvider readiness handshake, exactly once.
   plugin.queueCardAction(true)
   plugin.queueCardAction(false)

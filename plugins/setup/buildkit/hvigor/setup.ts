@@ -1,4 +1,4 @@
-import { HvigorPlugin, HvigorNode } from '@ohos/hvigor';
+import type { HvigorPlugin, HvigorNode } from '@ohos/hvigor';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
@@ -15,16 +15,14 @@ export function setupPlugin(): HvigorPlugin {
       node.registerTask({
         name: 'setup',
         run: async () => {
-          const isWindows = process.platform === 'win32';
           const launcher = path.join(
             buildkitDir,
-            isWindows ? 'run_build_tool.cmd' : 'run_build_tool.sh',
+            'build_ohos.cjs',
           );
-          const archArgs = ['--arch', 'arm64'];
 
           const { stdout, stderr } = await execFileAsync(
-            isWindows ? 'cmd' : launcher,
-            isWindows ? ['/c', launcher, 'ohos', ...archArgs] : ['ohos', ...archArgs],
+            process.execPath,
+            [launcher],
             {
               cwd: projectRoot,
               env: {

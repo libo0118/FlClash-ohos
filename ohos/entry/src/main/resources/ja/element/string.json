@@ -47,6 +47,12 @@
     {
       "name": "widget_open",
       "value": "アプリを開く"
-    }
+    },
+    {"name":"widget_easytier_ready","value":"準備完了"},
+    {"name":"widget_easytier_starting","value":"接続中…"},
+    {"name":"widget_easytier_stopped","value":"停止"},
+    {"name":"widget_easytier_unavailable","value":"利用不可"},
+    {"name":"widget_easytier_unknown","value":"不明"},
+    {"name":"widget_unknown","value":"VPN 状態不明 · アプリを開く"}
   ]
 }

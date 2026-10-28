@@ -17,6 +17,7 @@ import VpnCardManager from '../managers/VpnCardManager'
 export default class ServicePlugin implements FlutterPlugin, MethodCallHandler {
   private parent: EntryAbility
   private channel: MethodChannel | undefined
+  private coreChannel: MethodChannel | undefined
   private cardReady: boolean = false
   private cardPending: boolean = false
   private queuedCardAction: boolean | undefined
@@ -34,6 +35,8 @@ export default class ServicePlugin implements FlutterPlugin, MethodCallHandler {
   onAttachedToEngine(binding: FlutterPluginBinding): void {
     this.channel = new MethodChannel(binding.getBinaryMessenger(), "com.follow.clash/service")
     this.channel.setMethodCallHandler(this)
+    this.coreChannel = new MethodChannel(binding.getBinaryMessenger(), "com.follow.clash/core")
+    this.coreChannel.setMethodCallHandler(this)
   }
 
   onDetachedFromEngine(binding: FlutterPluginBinding): void {
@@ -46,6 +49,7 @@ export default class ServicePlugin implements FlutterPlugin, MethodCallHandler {
     if (this.channel != null) {
       this.channel.setMethodCallHandler(null)
     }
+    this.coreChannel?.setMethodCallHandler(null)
   }
 
   onMethodCall(call: MethodCall, result: MethodResult): void {
@@ -55,8 +59,8 @@ export default class ServicePlugin implements FlutterPlugin, MethodCallHandler {
       this.handleShutdown(result)
     } else if (call.method === "syncState") {
       this.handleSyncState(call, result)
-    } else if (call.method === "invokeAction") {
-      this.handleInvokeAction(call, result)
+    } else if (call.method === "invokeMethod") {
+      this.handleInvokeMethod(call, result)
     } else if (call.method === "start") {
       this.handleStart(result)
     } else if (call.method === "stop") {
@@ -158,9 +162,9 @@ export default class ServicePlugin implements FlutterPlugin, MethodCallHandler {
     result.success("")
   }
 
-  private handleInvokeAction(call: MethodCall, result: MethodResult): void {
-    const callbackStub = new CallbackStub("invokeAction", (data: string) => { result.success(data) })
-    this.parent.handleInvokeAction(call.args, callbackStub)
+  private handleInvokeMethod(call: MethodCall, result: MethodResult): void {
+    const callbackStub = new CallbackStub("invokeMethod", (data: string) => { result.success(data) })
+    this.parent.handleInvokeMethod(call.args, callbackStub)
   }
 
   private handleStart(result: MethodResult): void {
@@ -199,18 +203,25 @@ export default class ServicePlugin implements FlutterPlugin, MethodCallHandler {
       globalState.runState = RunState.pending
       ++this.cardStateRevision
       this.cardManager.publish('stopping')
-      const resultStub = new ResultStub("handleStop", (runTime: number) => {
+      const networkSecret = globalState.state?.vpnOptions?.easyTier?.networkSecret ?? ''
+      let completed = false
+      const finish = (runTime: number, error: string): void => {
+        if (completed) return
+        completed = true
+        const message = sanitizeStartupMessage(error, networkSecret).slice(0, 2400)
         globalState.runTime = runTime
-        globalState.runState = RunState.stop
+        globalState.runState = runTime !== 0 ? RunState.start : RunState.stop
         ++this.cardStateRevision
-        this.cardManager.publish('stopped')
-        result.success(true)
-      })
-      this.parent.handleStopService(resultStub).catch(() => {
-        globalState.runState = RunState.start
-        ++this.cardStateRevision
-        this.cardManager.publish('failed')
-        result.success(false)
+        this.cardManager.publish(message ? 'failed' : runTime !== 0 ? 'connected' : 'stopped')
+        if (message) {
+          result.error('VPN_STOP_FAILED', message, null)
+        } else {
+          result.success(runTime === 0)
+        }
+      }
+      const resultStub = new ResultStub("handleStop", finish)
+      this.parent.handleStopService(resultStub).catch((error: Error) => {
+        finish(globalState.runTime, startupErrorMessage('VPN 停止请求', error, networkSecret))
       })
       return
     }

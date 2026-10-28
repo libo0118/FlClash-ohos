@@ -1,0 +1,6 @@
+# freezed emits lines of trailing spaces, and generated code is never edited by hand.
+lib/**/generated/** -whitespace
+
+# Dependency patches preserve upstream context whitespace verbatim.
+.github/*.patch text eol=lf -whitespace
+.github/*.sh text eol=lf

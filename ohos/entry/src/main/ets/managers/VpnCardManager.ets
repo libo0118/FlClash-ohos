@@ -5,7 +5,7 @@ import { util } from '@kit.ArkTS'
 import { rpc } from '@kit.IPCKit'
 
 interface VpnCardRegistration { id: string; token: string }
-interface VpnCardSummary { profileName: string; easyTier: boolean; ready: boolean }
+interface VpnCardSummary { profileName: string; easyTier: boolean; ready: boolean; easyTierStatus?: string; vpnStatus?: string }
 export interface VpnCardRequest { formId: string; token: string; enable?: boolean }
 interface VpnCardData {
   formId: string
@@ -14,6 +14,7 @@ interface VpnCardData {
   controlReady: boolean
   profileName: string
   easyTierEnabled: boolean
+  easyTierStatus: string
 }
 
 export class VpnCardReply implements rpc.Parcelable {
@@ -88,6 +89,8 @@ export default class VpnCardManager {
       const summary = this.summary()
       summary.profileName = profileName.slice(0, 64)
       summary.easyTier = easyTier
+      if (!easyTier) summary.easyTierStatus = 'disabled'
+      else if (!summary.easyTierStatus || summary.easyTierStatus === 'disabled') summary.easyTierStatus = 'unknown'
       this.write('vpn-card-summary', JSON.stringify(summary))
     } catch (_) {}
   }
@@ -100,17 +103,35 @@ export default class VpnCardManager {
     } catch (_) {}
   }
 
+  setEasyTierStatus(status: string): void {
+    if (!['disabled', 'starting', 'ready', 'unavailable', 'stopped'].includes(status)) return
+    const summary = this.summary()
+    summary.easyTierStatus = summary.easyTier ? status : 'disabled'
+    this.write('vpn-card-summary', JSON.stringify(summary))
+    this.publish(summary.vpnStatus ?? 'unknown')
+  }
+
   private data(registration: VpnCardRegistration, status: string, ready: boolean = this.summary().ready): formBindingData.FormBindingData {
     const summary = this.summary()
     const data: VpnCardData = {
       formId: registration.id, cardToken: registration.token,
       vpnStatus: status, controlReady: ready,
       profileName: summary.profileName, easyTierEnabled: summary.easyTier,
+      easyTierStatus: summary.easyTier ? summary.easyTierStatus ?? 'unknown' : 'disabled',
     }
     return formBindingData.createFormBindingData(data)
   }
 
   publish(status: string, ready?: boolean): void {
+    try {
+      const summary = this.summary()
+      const changed = summary.vpnStatus !== status
+      summary.vpnStatus = status
+      if (summary.easyTier && status === 'stopped') summary.easyTierStatus = 'stopped'
+      if (summary.easyTier && status === 'starting' && changed) summary.easyTierStatus = 'starting'
+      if (summary.easyTier && status === 'failed') summary.easyTierStatus = 'unavailable'
+      this.write('vpn-card-summary', JSON.stringify(summary))
+    } catch (_) {}
     for (const registration of this.registrations()) {
       try { formProvider.updateForm(registration.id, this.data(registration, status, ready)).catch(() => {}) } catch (_) {}
     }

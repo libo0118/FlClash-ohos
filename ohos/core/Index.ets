@@ -1,5 +1,5 @@
 export {
-  invokeAction,
+  invokeMethod,
   startTUN,
   quickSetup,
   setEventListener,

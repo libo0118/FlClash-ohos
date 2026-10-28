@@ -47,6 +47,12 @@
     {
       "name": "widget_open",
       "value": "Open app"
-    }
+    },
+    {"name":"widget_easytier_ready","value":"Ready"},
+    {"name":"widget_easytier_starting","value":"Connecting…"},
+    {"name":"widget_easytier_stopped","value":"Stopped"},
+    {"name":"widget_easytier_unavailable","value":"Unavailable"},
+    {"name":"widget_easytier_unknown","value":"Unknown"},
+    {"name":"widget_unknown","value":"VPN status unknown · open app"}
   ]
 }

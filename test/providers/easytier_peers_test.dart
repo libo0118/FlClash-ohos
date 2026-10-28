@@ -3,17 +3,34 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:riverpod/riverpod.dart';
 
 Map<String, Object?> telemetry(int revision, {String status = 'ready'}) => {
-  'sessionId': 'session-1', 'revision': revision, 'status': status,
-  'cidrs': ['192.168.6.0/24'], 'peerStatus': status,
+  'sessionId': 'session-1',
+  'revision': revision,
+  'status': status,
+  'cidrs': ['192.168.6.0/24'],
+  'peerStatus': status,
   'capturedAt': DateTime.now().millisecondsSinceEpoch,
   'virtualIpv4': '10.126.126.159',
   'peers': [
-    {'peerId': '42', 'hostname': 'office', 'ipv4': '10.126.126.42',
-      'connectionType': 'direct', 'latencyMs': 12.5, 'protocols': ['tcp'],
-      'connections': ['TCP 192.168.6.159:45000 → 192.168.6.183:11010']},
-    {'peerId': '43', 'hostname': 'nas', 'ipv4': '10.126.126.43',
-      'connectionType': 'relay', 'latencyMs': 7, 'protocols': [],
-      'connections': ['must not attribute a next-hop connection to a relayed peer']},
+    {
+      'peerId': '42',
+      'hostname': 'office',
+      'ipv4': '10.126.126.42',
+      'connectionType': 'direct',
+      'latencyMs': 12.5,
+      'protocols': ['tcp'],
+      'connections': ['TCP 192.168.6.159:45000 → 192.168.6.183:11010'],
+    },
+    {
+      'peerId': '43',
+      'hostname': 'nas',
+      'ipv4': '10.126.126.43',
+      'connectionType': 'relay',
+      'latencyMs': 7,
+      'protocols': [],
+      'connections': [
+        'must not attribute a next-hop connection to a relayed peer',
+      ],
+    },
   ],
 };
 
@@ -28,7 +45,9 @@ void main() {
     expect(state.peers.first.latencyMs, 12.5);
     expect(state.peers.first.protocols, ['TCP']);
     expect(state.peers.last.latencyMs, isNull);
-    expect(state.peers.first.connections, ['TCP 192.168.6.159:45000 → 192.168.6.183:11010']);
+    expect(state.peers.first.connections, [
+      'TCP 192.168.6.159:45000 → 192.168.6.183:11010',
+    ]);
     expect(state.peers.last.connections, isEmpty);
     final changed = telemetry(2);
     ((changed['peers'] as List).first as Map)['latencyMs'] = 23.7;
@@ -58,7 +77,9 @@ void main() {
     expect(state.blockedCidrs, ['192.168.6.0/24']);
   });
 
-  testWidgets('expiry preserves routes and reset cancels the timer', (tester) async {
+  testWidgets('expiry preserves routes and reset cancels the timer', (
+    tester,
+  ) async {
     final container = ProviderContainer();
     addTearDown(container.dispose);
     final routes = container.read(easyTierRoutesProvider.notifier);

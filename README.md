@@ -1,161 +1,158 @@
-<div>
+<div align="center">
 
-[**简体中文**](README_zh_CN.md)
+<img src="assets/images/icon.png" alt="FlClash" width="88">
+
+# FlClash
+
+A multi-platform proxy client based on ClashMeta. Simple to use, open source and ad-free.
+
+**English** · [简体中文](README_zh_CN.md)
+
+[![Release](https://img.shields.io/github/v/release/chen08209/FlClash?style=flat-square&label=release)](https://github.com/chen08209/FlClash/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/chen08209/FlClash/total?style=flat-square&logo=github)](https://github.com/chen08209/FlClash/releases)
+[![License](https://img.shields.io/github/license/chen08209/FlClash?style=flat-square)](LICENSE)
+[![Telegram](https://img.shields.io/badge/Telegram-channel-26A5E4?style=flat-square&logo=telegram&logoColor=white)](https://t.me/FlClash)
+
+[Website](https://chen08209.github.io/FlClash) · [Download](#download) · [Changelog](CHANGELOG.md) · [Build from source](#build-from-source)
 
 </div>
 
-## FlClash
+## HarmonyOS and EasyTier fork
 
-[![Downloads](https://img.shields.io/github/downloads/tljk/FlClash-ohos/total?style=flat-square&logo=github)](https://github.com/tljk/FlClash-ohos/releases/)[![Last Version](https://img.shields.io/github/release/tljk/FlClash-ohos/all.svg?style=flat-square)](https://github.com/tljk/FlClash-ohos/releases/)[![License](https://img.shields.io/github/license/tljk/FlClash-ohos?style=flat-square)](LICENSE)
+This fork adapts HarmonyOS/OpenHarmony and the embedded EasyTier integration to the upstream v0.9.2 UI. Work lives on
+[feature/easytier-ui-v0.9.2-ohos](https://github.com/libo0118/FlClash-ohos/tree/feature/easytier-ui-v0.9.2-ohos);
+the planned fork version is `0.9.2+2026102801`. This is an integration branch; its new CI, package and device checks are pending.
 
-[![Channel](https://img.shields.io/badge/Telegram-Channel-blue?style=flat-square&logo=telegram)](https://t.me/FlClash_ohos)
+One app and one system VPN combine the existing proxy subscription with EasyTier TCP/UDP access. The dashboard has
+separate VPN runtime and EasyTier status, a movable compact EasyTier entry, and matching details and configuration pages.
+Keep existing subscriptions, network identity, peer URLs and optional IPv4 CIDRs when upgrading; see
+[configuration, migration and verification notes](README_EASYTIER.md). Upstream downloads below do not include this fork's HarmonyOS integration.
 
-A multi-platform proxy client based on ClashMeta, simple and easy to use, open-source and ad-free.
+Credits: [FlClash](https://github.com/chen08209/FlClash), the
+[OpenHarmony port](https://github.com/tljk/FlClash-ohos), and [EasyTier](https://github.com/EasyTier/EasyTier).
+Their license and third-party notices remain applicable.
 
-on Desktop:
-<p style="text-align: center;">
-    <img alt="desktop" src="snapshots/desktop.gif">
-</p>
-
-on Mobile:
-<p style="text-align: center;">
-    <img alt="mobile" src="snapshots/mobile.gif">
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="snapshots/preview-dark.png">
+    <img alt="FlClash dashboard on a MacBook and a phone" src="snapshots/preview.png" width="92%">
+  </picture>
 </p>
 
 ## Features
 
-✈️ Multi-platform: Android, Windows, macOS, Linux and OpenHarmony
-
-💻 Adaptive multiple screen sizes, Multiple color themes available
-
-💡 Based on Material You Design, [Surfboard](https://github.com/getsurfboard/surfboard)-like UI
-
-☁️ Supports data sync via WebDAV
-
-✨ Support subscription link, Dark mode
-
-## Use
-
-### OpenHarmony EasyTier integration
-
-One FlClash app and one system VPN combine the existing proxy subscription with embedded EasyTier TCP/UDP access. EasyTier automatically supplies its virtual IPv4 networks and subnet routes advertised by remote peers, including relayed peers; FlClash updates the routing rules while the VPN keeps running.
-
-Enter the EasyTier network name, secret and peer URLs in the existing EasyTier configuration page. **Supplemental IPv4 CIDRs are optional**: leave them empty to use learned routes, or retain/add explicit networks. The page shows the latest learned networks and synchronization status. A remote LAN must still be published by an EasyTier peer; learning routes cannot expose a LAN that the peer has not advertised.
-
-Only RFC1918 private IPv4 networks and `100.64.0.0/10` are accepted. Default/public routes, IPv6, loopback, and networks overlapping the VPN's `172.19.0.0/30` are excluded. Withdrawn learned networks receive `REJECT` rules so they do not fall through to the public proxy; rediscovered or manually configured networks use EasyTier first. This integration supports TCP/UDP, not ICMP ping. A synchronized route snapshot does not verify that a particular intranet service is reachable.
-
-Build `0.8.94+2026101303` logs the marker `ET-LOG-20261013-3`. Enable **Tools → Application → Log capture**, reproduce the issue, then open **Tools → More → Logs** and use the save icon to export. Startup, VPN and EasyTier diagnostics use the existing log page; the latest 1000 records are held in memory and cleared when the app restarts. See [configuration and build notes](README_EASYTIER.md).
-
-### Linux
-
-⚠️ Make sure to install the following dependencies before using them
-
-   ```bash
-    sudo apt-get install libayatana-appindicator3-dev
-    sudo apt-get install libkeybinder-3.0-dev
-   ```
-
-### Android
-
-Support the following actions
-
-   ```bash
-    com.follow.clash.action.START
-    
-    com.follow.clash.action.STOP
-    
-    com.follow.clash.action.TOGGLE
-   ```
+- **One app for Android, Windows, macOS and Linux**, with x64 and ARM64 builds on the desktop.
+- **mihomo (Clash.Meta) core** with rule routing, proxy groups, latency tests, system proxy and TUN mode.
+- **Profiles** from a subscription link or a file, with a built-in editor, override scripts, and custom rules,
+  proxies and proxy groups.
+- **Live views** of connections, requests, DNS queries and logs.
+- **Material You design with Apple-style interaction**: dynamic color, light and dark themes, continuous corners,
+  sheets that snap between heights, and layouts that adapt from phones to desktops.
+- **Backup and restore** through WebDAV or a local file.
+- **Platform touches**: a Quick Settings tile, per-app proxy and Android TV support on Android; a tray menu and
+  global hotkeys on the desktop.
+- **Open source and ad-free**, licensed under GPL-3.0.
 
 ## Download
 
-<a href="https://chen08209.github.io/FlClash-fdroid-repo/repo?fingerprint=789D6D32668712EF7672F9E58DEEB15FBD6DCEEC5AE7A4371EA72F2AAE8A12FD"><img alt="Get it on F-Droid" src="snapshots/get-it-on-fdroid.svg" width="200px"/></a> <a href="https://github.com/tljk/FlClash-ohos/releases"><img alt="Get it on GitHub" src="snapshots/get-it-on-github.svg" width="200px"/></a>
+Get the latest build from [GitHub Releases](https://github.com/chen08209/FlClash/releases/latest), or open the
+[website](https://chen08209.github.io/FlClash#download), which picks the right file for your device.
 
-### Homebrew
+| Platform | Packages | Notes |
+| --- | --- | --- |
+| Android | APK for `arm64-v8a`, `armeabi-v7a` and `x86_64` | Most phones use `arm64-v8a`. Also on the F-Droid repository below. |
+| Windows 10 and later | Installer (`.exe`) or portable `.zip`, for x64 and ARM64 | Pick ARM64 on Snapdragon and other ARM laptops. |
+| macOS 12 and later | DMG for Apple Silicon and Intel | Also on Homebrew. |
+| Linux | `.deb`, `.rpm` and AppImage, for x64 and ARM64 | See the tray note below. |
+
+<p>
+  <a href="https://chen08209.github.io/FlClash-fdroid-repo/repo?fingerprint=789D6D32668712EF7672F9E58DEEB15FBD6DCEEC5AE7A4371EA72F2AAE8A12FD"><img alt="Get it on F-Droid" src="snapshots/get-it-on-fdroid.svg" height="56"></a>
+  <a href="https://github.com/chen08209/FlClash/releases/latest"><img alt="Get it on GitHub" src="snapshots/get-it-on-github.svg" height="56"></a>
+</p>
+
+**Homebrew**
 
 ```bash
 brew tap chen08209/tap
 brew install --cask flclash
 ```
 
-## Build
+**Linux tray icon**
 
-1. Update submodules
-   ```bash
-   git submodule update --init --recursive
-   ```
+The `.deb` package installs its own dependencies. With the AppImage or the `.rpm`, install the AyatanaAppIndicator
+library so the tray icon can show:
 
-2. Install `Flutter` and `Golang` environment
+```bash
+sudo apt-get install libayatana-appindicator3-1   # Debian and Ubuntu
+sudo dnf install libayatana-appindicator-gtk3     # Fedora
+```
 
-3. Build Application
+**Unattended desktop**
 
-    - android
+FlClash starts the core only after the disclaimer is accepted. Where nobody can click it, such as a container, set
+`FLCLASH_ACCEPT_DISCLAIMER=1` in the app's environment to accept it on first launch.
 
-        1. Install `Android SDK`, `Android NDK`
+## Usage
 
-        2. Set `ANDROID_NDK` environment variable
+**Import a profile from a link.** Opening a link in this form imports the subscription into FlClash. The `clashmeta://`
+and `flclash://` schemes work the same way.
 
-        3. Run build script
+```text
+clash://install-config?url=<URL-encoded subscription link>
+```
 
-           ```bash
-           dart setup.dart android
-           ```
+**Automate on Android.** Tasker, MacroDroid and similar apps can start, stop or toggle the proxy by starting an
+activity with one of these actions:
 
-    - windows
+```text
+com.follow.clash.action.START
+com.follow.clash.action.STOP
+com.follow.clash.action.TOGGLE
+```
 
-        1. Requires a Windows client
+From a computer, the same works over adb:
 
-        2. Install `GCC`, `Inno Setup`
+```bash
+adb shell am start -a com.follow.clash.action.TOGGLE
+```
 
-        3. Run build script
+## Build from source
 
-           ```bash
-           dart setup.dart windows
-           ```
+You need [Flutter](https://docs.flutter.dev/get-started/install) 3.47 (release builds use 3.47.6),
+[Go](https://go.dev/dl/) 1.27 and [Rust](https://rustup.rs/) installed through rustup. Each platform builds on its own
+host, except Android, which builds anywhere.
 
-    - linux
+```bash
+git clone --recursive https://github.com/chen08209/FlClash.git
+cd FlClash
+flutter pub get
+dart setup.dart android   # or windows, macos, linux
+```
 
-        1. Requires a Linux client
+Packages land in `dist/`. The Go core and the Rust libraries are compiled as part of the Flutter build.
 
-        2. Dependencies are auto-installed by setup script, or manually:
-           ```bash
-           sudo apt-get install -y libayatana-appindicator3-dev libkeybinder-3.0-dev
-           ```
+| Platform | Also needed |
+| --- | --- |
+| Android | Android SDK with the NDK. Add `--arch arm64` to build a single ABI. |
+| Windows | GCC (MinGW-w64) for the core and [Inno Setup](https://jrsoftware.org/isinfo.php) 6 for the installer. |
+| macOS | Xcode and Node.js. The script installs `appdmg` through npm. |
+| Linux | Debian or Ubuntu. The script installs the build packages with apt and downloads `appimagetool`. |
 
-        3. Run build script
+Run `dart setup.dart --help` for the remaining options, such as `--targets` to build only some package formats.
 
-           ```bash
-           dart setup.dart linux
-           ```
+## Support
 
-    - macOS
+Starring the repository is the easiest way to support the project. Questions and announcements go to the
+[Telegram channel](https://t.me/FlClash); bugs and feature requests go to
+[GitHub Issues](https://github.com/chen08209/FlClash/issues).
 
-        1. Requires a macOS client
+<a href="https://star-history.com/#chen08209/FlClash&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=chen08209/FlClash&type=Date&theme=dark">
+    <img alt="Star history" src="https://api.star-history.com/svg?repos=chen08209/FlClash&type=Date" width="640">
+  </picture>
+</a>
 
-        2. Run build script
+## License
 
-           ```bash
-           dart setup.dart macos
-           ```
-
-    - OpenHarmony
-
-        1. Install `DevEco Studio` with the OpenHarmony SDK
-
-        2. Set the `OHOS_NDK_HOME` environment variable
-
-        3. Run build script
-
-           ```bash
-           dart setup.dart ohos
-           ```
-
-## Star
-
-The easiest way to support developers is to click on the star (⭐) at the top of the page.
-
-<p style="text-align: center;">
-    <a href="https://api.star-history.com/svg?repos=tljk/FlClash-ohos&Date">
-        <img alt="start" width=50% src="https://api.star-history.com/svg?repos=tljk/FlClash-ohos&Date"/>
-    </a>
-</p>
+FlClash is released under the [GPL-3.0 license](LICENSE).

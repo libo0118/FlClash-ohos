@@ -7,14 +7,18 @@ const easyTierSocksPort = 17890;
 const easyTierProxyName = '__FlClash_EasyTier__';
 
 // Local IPC identity only; never include this credential-derived tag in logs.
-String easyTierRouteConfigTag(EasyTierProps props) => sha256.convert(
-  utf8.encode(jsonEncode([
-    props.networkName,
-    props.networkSecret,
-    props.peerUrls,
-    props.ipv6,
-  ])),
-).toString();
+String easyTierRouteConfigTag(EasyTierProps props) => sha256
+    .convert(
+      utf8.encode(
+        jsonEncode([
+          props.networkName,
+          props.networkSecret,
+          props.peerUrls,
+          props.ipv6,
+        ]),
+      ),
+    )
+    .toString();
 
 String redactEasyTierSecret(String message, String secret) {
   if (secret.isEmpty) return message;
@@ -71,7 +75,8 @@ String? normalizeEasyTierCidr(String value) {
   if (parsed == null) return null;
   final mask = (0xffffffff << (32 - parsed.prefix)) & 0xffffffff;
   final address = parsed.address & mask;
-  final cidr = '${(address >> 24) & 255}.${(address >> 16) & 255}.'
+  final cidr =
+      '${(address >> 24) & 255}.${(address >> 16) & 255}.'
       '${(address >> 8) & 255}.${address & 255}/${parsed.prefix}';
   return isEasyTierCidr(cidr) ? cidr : null;
 }
@@ -135,18 +140,22 @@ void applyEasyTierConfig(
   while (names.contains(name)) {
     name = '${name}_';
   }
-  final learned = learnedCidrs
-      .map(normalizeEasyTierCidr)
-      .whereType<String>()
-      .toSet()
-      .toList()..sort();
+  final learned =
+      learnedCidrs
+          .map(normalizeEasyTierCidr)
+          .whereType<String>()
+          .toSet()
+          .toList()
+        ..sort();
   final active = {...props.cidrs, ...learned};
-  final blocked = blockedCidrs
-      .map(normalizeEasyTierCidr)
-      .whereType<String>()
-      .where((cidr) => !active.contains(cidr))
-      .toSet()
-      .toList()..sort();
+  final blocked =
+      blockedCidrs
+          .map(normalizeEasyTierCidr)
+          .whereType<String>()
+          .where((cidr) => !active.contains(cidr))
+          .toSet()
+          .toList()
+        ..sort();
   config['mode'] = 'rule';
   config['proxies'] = [
     ...proxies,

@@ -17,7 +17,9 @@ void main() {
   });
   tearDown(() => container.dispose());
 
-  testWidgets('initialization resumes the latest pending routes', (tester) async {
+  testWidgets('initialization resumes the latest pending routes', (
+    tester,
+  ) async {
     setup.receiveRoutes(1);
     setup.receiveRoutes(2);
     await tester.pump(const Duration(seconds: 1));
@@ -34,7 +36,9 @@ void main() {
     expect(setup.applied, [2]);
   });
 
-  testWidgets('readiness without pending routes does not reload', (tester) async {
+  testWidgets('readiness without pending routes does not reload', (
+    tester,
+  ) async {
     container.read(initProvider.notifier).value = true;
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
@@ -42,7 +46,9 @@ void main() {
     expect(setup.applied, isEmpty);
   });
 
-  testWidgets('losing readiness before the timer defers the reload', (tester) async {
+  testWidgets('losing readiness before the timer defers the reload', (
+    tester,
+  ) async {
     setup.receiveRoutes(1);
     container.read(initProvider.notifier).value = true;
     await tester.pump();
@@ -57,22 +63,24 @@ void main() {
   });
 
   for (final stopped in [true, false]) {
-    testWidgets('readiness keeps ${stopped ? 'stopped' : 'disabled'} routes pending',
-        (tester) async {
-      setup.running = !stopped;
-      setup.enabled = stopped;
-      setup.receiveRoutes(1);
-      container.read(initProvider.notifier).value = true;
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 250));
-      expect(setup.applied, isEmpty);
+    testWidgets(
+      'readiness keeps ${stopped ? 'stopped' : 'disabled'} routes pending',
+      (tester) async {
+        setup.running = !stopped;
+        setup.enabled = stopped;
+        setup.receiveRoutes(1);
+        container.read(initProvider.notifier).value = true;
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(setup.applied, isEmpty);
 
-      setup.running = true;
-      setup.enabled = true;
-      setup.resumeEasyTierRouteRefresh();
-      await tester.pump(const Duration(milliseconds: 250));
-      expect(setup.applied, [1]);
-    });
+        setup.running = true;
+        setup.enabled = true;
+        setup.resumeEasyTierRouteRefresh();
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(setup.applied, [1]);
+      },
+    );
   }
 }
 

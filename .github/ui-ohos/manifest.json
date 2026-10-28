@@ -1,0 +1,709 @@
+{
+  "packages": [
+    {
+      "name": "material_ui",
+      "version": "1.5.0",
+      "files": [
+        {
+          "path": "lib/src/about.dart",
+          "before": "9387521a8efdd77b98d77d7dbbcba96d3137bee92efaed7590f0ef8a6961f6f5",
+          "after": "99ff4d72da26a8feb00bc476716adb1e3f43099f0303d47a0b370ea9147b17c5",
+          "edits": [
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/action_buttons.dart",
+          "before": "db70f723d577bf0ae1a475e496ac4b822437f86d62da1222751ef8757f3c1fab",
+          "after": "f74a064d507f58d4bc380eaae1b76a47afadb3e72b48f1abe38e0b565e339a77",
+          "edits": [
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 1
+            },
+            {
+              "from": "\n          case TargetPlatform.android:\n",
+              "to": "\n          case TargetPlatform.ohos:\n          case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/adaptive_text_selection_toolbar.dart",
+          "before": "0ee99bb00446f6ae631173e8a5ba5826e0e2ca1187f4d95913c7921757dc8eab",
+          "after": "e7b719c23b32a74827d4ff5e6c41d15230b433243f7734fcb03ba2f064f82611",
+          "edits": [
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 3
+            }
+          ]
+        },
+        {
+          "path": "lib/src/app.dart",
+          "before": "cb7546b123fc76ca2534aa3563acc952b865efc667c45671219450015bfd12a9",
+          "after": "743bc2ebad4ed58159de655382b6f4519e5cdb10a5f20090b859246f6067574f",
+          "edits": [
+            {
+              "from": "\n          case TargetPlatform.android:\n",
+              "to": "\n          case TargetPlatform.ohos:\n          case TargetPlatform.android:\n",
+              "count": 1
+            },
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/app_bar.dart",
+          "before": "3b0a56e86366a2b10cafe7ae2762c7cf2d9e01d97cacb5104b3ca9b5b747bbe8",
+          "after": "bb59a2af289c7f256348c5053e2d8a73ac07e0c090cc73218f850704d38d2c8d",
+          "edits": [
+            {
+              "from": "\n        TargetPlatform.android ||\n",
+              "to": "\n        TargetPlatform.ohos || TargetPlatform.android ||\n",
+              "count": 1
+            },
+            {
+              "from": "\n            TargetPlatform.android ||\n",
+              "to": "\n            TargetPlatform.ohos || TargetPlatform.android ||\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/bottom_sheet.dart",
+          "before": "f636bae1281588346f45a866229cfcb12b9a671718d252b7020172ac293be9ae",
+          "after": "2a68416f8cb76b59827d9ce508224bbeac828feda980d363c0fc4682a31a69a3",
+          "edits": [
+            {
+              "from": "\n    TargetPlatform.android ||\n",
+              "to": "\n    TargetPlatform.ohos || TargetPlatform.android ||\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/calendar_date_picker.dart",
+          "before": "1f83a32609f833b93259927cecd7dc6681f52788a049140b5099cfe08047a6fc",
+          "after": "f522c945fba4711239e1eae7df21edd0b401f9003ca9f72408a3922d0fc4ce91",
+          "edits": [
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 1
+            },
+            {
+              "from": "\n        case TargetPlatform.android:\n",
+              "to": "\n        case TargetPlatform.ohos:\n        case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/checkbox.dart",
+          "before": "a3bbaa55fdc919c0e6e2330c3d916ebd447104f5ae5683054ef4da6ee6f57341",
+          "after": "bc0468e47b1ef188d42d2b45ab2001219a7d2feee48627b96de6aa948c59cdf4",
+          "edits": [
+            {
+              "from": "\n          case TargetPlatform.android:\n",
+              "to": "\n          case TargetPlatform.ohos:\n          case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/date_picker.dart",
+          "before": "aea154ca035b6e6c6a5ccf4d04c99e76f09942a637bf79a20a3f34b5180131b1",
+          "after": "fa7ed4ebc4827b34fbfb6f9c7f57ca67e8b4ddfb5fe444467bb026aba2b55507",
+          "edits": [
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/dialog.dart",
+          "before": "2132d9fcb083868604f53402c8eb16bc73204c8f98dea53abe14db061a470238",
+          "after": "89571ca5f70a2d93e9ca086b44bc8ef04081b15d44b9676df4138720c7198851",
+          "edits": [
+            {
+              "from": "\n      TargetPlatform.android ||\n",
+              "to": "\n      TargetPlatform.ohos || TargetPlatform.android ||\n",
+              "count": 1
+            },
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 2
+            },
+            {
+              "from": "\n    case TargetPlatform.android:\n",
+              "to": "\n    case TargetPlatform.ohos:\n    case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/drawer.dart",
+          "before": "5fd08da00c62629424630a0a1ba6aabefdec04ae5252a7d9b2e1cdd39169addb",
+          "after": "feb3b0bf4a15329e0838de22fb9a9a725a81894ad4f6e8590a4aaf5f4cf0e3a8",
+          "edits": [
+            {
+              "from": "\n      TargetPlatform.android ||\n",
+              "to": "\n      TargetPlatform.ohos || TargetPlatform.android ||\n",
+              "count": 1
+            },
+            {
+              "from": "\n      TargetPlatform.android || TargetPlatform.iOS || TargetPlatform.fuchsia => false,\n",
+              "to": "\n      TargetPlatform.ohos || TargetPlatform.android || TargetPlatform.iOS || TargetPlatform.fuchsia => false,\n",
+              "count": 1
+            },
+            {
+              "from": "\n        TargetPlatform.android => true,\n",
+              "to": "\n        TargetPlatform.ohos || TargetPlatform.android => true,\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/dropdown_menu.dart",
+          "before": "8f2c56c5bb112e1b84e96c0c3cc1d353d0b3da8e5d1fe07cbb0b1e3996ca3daa",
+          "after": "6e439f009c7907fbce9e0e73e586e2dd8aba408f570bccff57c9341acd478237",
+          "edits": [
+            {
+              "from": "\n          TargetPlatform.iOS || TargetPlatform.android || TargetPlatform.fuchsia => false,\n",
+              "to": "\n          TargetPlatform.iOS || TargetPlatform.ohos || TargetPlatform.android || TargetPlatform.fuchsia => false,\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/expansion_tile.dart",
+          "before": "3953b8c1a0da150149507be3c288f04de98c194d78670400bf17d905444caab3",
+          "after": "96c152ffb6e89422e284db78cee02c4c2e2924c26fdbf5c6802d8a1e46dc6f08",
+          "edits": [
+            {
+              "from": "\n    else if (defaultTargetPlatform != TargetPlatform.android) {\n",
+              "to": "\n    else if (defaultTargetPlatform != TargetPlatform.android && defaultTargetPlatform != TargetPlatform.ohos) {\n",
+              "count": 1
+            },
+            {
+              "from": "\n    if (defaultTargetPlatform == TargetPlatform.android) {\n",
+              "to": "\n    if (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.ohos) {\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/flexible_space_bar.dart",
+          "before": "4af58be371e5701b58e8708243e6c5a9a947193f17a9fbd8221e986ee8a505ed",
+          "after": "34a52b448b03615b6b641c3f839bcbe7dec192ac2ac0ef443183d13464bf5e31",
+          "edits": [
+            {
+              "from": "\n          TargetPlatform.android ||\n",
+              "to": "\n          TargetPlatform.ohos || TargetPlatform.android ||\n",
+              "count": 1
+            },
+            {
+              "from": "\n            case TargetPlatform.android:\n",
+              "to": "\n            case TargetPlatform.ohos:\n            case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/icons.dart",
+          "before": "073ec9e4c431e2d9b130d59d28337db7e3510c3865fabca3087d8febcbdc8e08",
+          "after": "8bc387358fcf2c04b1d4503721a57e2ae6866b3d1adf698069192bd7c071986c",
+          "edits": [
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/magnifier.dart",
+          "before": "cac57d253238cf54bafc717e02c56e25019089f20462a46014d715023c62794b",
+          "after": "4f9a8b3a2144cbfd1e5c10e0b0d565d073e1f6979a6f4751860d7a2a8022b4a4",
+          "edits": [
+            {
+              "from": "\n            case TargetPlatform.android:\n",
+              "to": "\n            case TargetPlatform.ohos:\n            case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/menu_anchor.dart",
+          "before": "5c9b2dbb65b3ad16b38ca3521bfd96f8e06812da529e954dc900a8328e506942",
+          "after": "b94b015585c8af5f882a7278149132f7f36fc79526d31badae6f6c3a8eab51ce",
+          "edits": [
+            {
+              "from": "\n        case TargetPlatform.android:\n",
+              "to": "\n        case TargetPlatform.ohos:\n        case TargetPlatform.android:\n",
+              "count": 4
+            },
+            {
+              "from": "\n    case TargetPlatform.android:\n",
+              "to": "\n    case TargetPlatform.ohos:\n    case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/page.dart",
+          "before": "f0542cac4300b144e5fe567168bbc1307e74c92ece250b29a4287e712159b353",
+          "after": "3851d6e5f17d1227c87ae5014b7de048e5cfcbb4ada3efb1afca3e27994c8398",
+          "edits": [
+            {
+              "from": "\n          TargetPlatform.android ||\n",
+              "to": "\n          TargetPlatform.ohos || TargetPlatform.android ||\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/page_transitions_theme.dart",
+          "before": "ad96817e59992cc6f5878bfcee19f3bd8d3c607c7cd6fbea38caa14e9d92121a",
+          "after": "a8ce90640c8a0733e563ae39ac83d88b451c2aa1d62b4fc50c50f507bea5c6b9",
+          "edits": [
+            {
+              "from": "\n        TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),\n",
+              "to": "\n        TargetPlatform.ohos: PredictiveBackPageTransitionsBuilder(),\n        TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),\n",
+              "count": 1
+            },
+            {
+              "from": "\n          TargetPlatform.android ||\n",
+              "to": "\n          TargetPlatform.ohos || TargetPlatform.android ||\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/popup_menu.dart",
+          "before": "4be4cb651c08e06c145803428ed1b97f88f8f050a7c9df29610df8ad255a1505",
+          "after": "173018d733f94dc4fc5849553037dfb07a9442e42700b628700dae66a6ae3f89",
+          "edits": [
+            {
+              "from": "\n    case TargetPlatform.android:\n",
+              "to": "\n    case TargetPlatform.ohos:\n    case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/progress_indicator.dart",
+          "before": "6169a7f1d8d6ff92d0b35a593512d90b4338d837256d48936a5144dc74d09a50",
+          "after": "ebe6315b4466b0b645725d464b29e162ff6db44070d73968ae64de5b2850ae47",
+          "edits": [
+            {
+              "from": "\n              case TargetPlatform.android:\n",
+              "to": "\n              case TargetPlatform.ohos:\n              case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/radio.dart",
+          "before": "1a8c720797491b8f133217ee770a75f138c912959e0395201bd0adae5804e489",
+          "after": "bb56e8cf8bb86910a5d2a959876b5edd70015484f5d376e789b0e2aa1d641692",
+          "edits": [
+            {
+              "from": "\n          case TargetPlatform.android:\n",
+              "to": "\n          case TargetPlatform.ohos:\n          case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/range_slider.dart",
+          "before": "24490e9897d4ffc3a42fe8dbdc2a9a37bfff90eb17a4fa187fd7dada122fce07",
+          "after": "88d07a4d9e6da11aea75d2aab302bb6074048a5c29e9c8b1fc5cfaab9c090228",
+          "edits": [
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/refresh_indicator.dart",
+          "before": "d83d2eacbdbda3f068eb349c08b941969a46a5347dd38bd0e844e4e5673029d7",
+          "after": "70f8b9281ff9770e6f37f8e453c4bf9ee9786e15eed41c9d8ebd3ad62a8abc43",
+          "edits": [
+            {
+              "from": "\n                              case TargetPlatform.android:\n",
+              "to": "\n                              case TargetPlatform.ohos:\n                              case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/reorderable_list.dart",
+          "before": "2edfaa76f56c6af9c6dd8fb34d0f40d6cf055e00a0f6f5f4a27ca46966cf7258",
+          "after": "f047d1949416e7dea9accb7e0ce336e344f52f3840d2ac98a867ed9faef6160d",
+          "edits": [
+            {
+              "from": "\n        case TargetPlatform.android:\n",
+              "to": "\n        case TargetPlatform.ohos:\n        case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/scaffold.dart",
+          "before": "3e53a5f0637152858175a14eb19be7e96cc32150196401dc2dfbed4e64c31a12",
+          "after": "2fc554569737a996a58b6501b2161934da784c43dc7519f295868c7a570b40e3",
+          "edits": [
+            {
+              "from": "\n      TargetPlatform.android ||\n",
+              "to": "\n      TargetPlatform.ohos || TargetPlatform.android ||\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/scrollbar.dart",
+          "before": "c5ddfb963e5496ce8e7d94ed3f3bbc03912abe30c32d4e4e32c02fedf06ae60d",
+          "after": "66075beb9433b8b0856773c7ed1f55b04ae6857b12a9cd7447326c20d0dd1a83",
+          "edits": [
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/search.dart",
+          "before": "ab87fb6e9acd2107e846c137f83c1a1dbb79a4095a6cc2d24d611a4aba3a0c76",
+          "after": "3d123112000c110ef72a4f97c5161c187178b73a768022515b45b62509a66b53",
+          "edits": [
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/search_anchor.dart",
+          "before": "9c03c4120047e85223b852fe0451e0407ecfcbb097b62b12822498233fdf73d8",
+          "after": "1445f3d53553dc24cfe5bcb648c99cc7d5a63df80a6d7fd2c482bb52c183eb66",
+          "edits": [
+            {
+              "from": "\n          TargetPlatform.iOS || TargetPlatform.android || TargetPlatform.fuchsia => true,\n",
+              "to": "\n          TargetPlatform.iOS || TargetPlatform.ohos || TargetPlatform.android || TargetPlatform.fuchsia => true,\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/selectable_text.dart",
+          "before": "2312d60667c343c14ef51fced528eb57dfb496594ee684a52cd7c89bb6a5bf3f",
+          "after": "a00648c7c0f5122f0e6b6946f2b9f536f57a74b58b30c4f0f9033201b31b14e7",
+          "edits": [
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "path": "lib/src/selection_area.dart",
+          "before": "b03d7867d272dbd503eaf0db4524efdb163bfc87d2a52602eef6bd2150683966",
+          "after": "5928c98899c18e0b212f0d9a7acbfc73556240209a8ece1a5477e9ccf1bf14bd",
+          "edits": [
+            {
+              "from": "\n          TargetPlatform.android || TargetPlatform.fuchsia => materialTextSelectionHandleControls,\n",
+              "to": "\n          TargetPlatform.ohos || TargetPlatform.android || TargetPlatform.fuchsia => materialTextSelectionHandleControls,\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/slider.dart",
+          "before": "0d882e0737eaf305fa79a67bbedfbea1fe6da84c4d0cb952d49a4be7e3ba667b",
+          "after": "fac66137cffcb7c8c47bf8d19c938708950c2c404dab03b579a384d0f65778d5",
+          "edits": [
+            {
+              "from": "\n            case TargetPlatform.android:\n",
+              "to": "\n            case TargetPlatform.ohos:\n            case TargetPlatform.android:\n",
+              "count": 1
+            },
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "path": "lib/src/switch.dart",
+          "before": "6dbc019094e776fd97cf206aaf171e97accca63f516173f82b023294e93d3cb8",
+          "after": "84da51127b9684f8827859ceffcaf529920aaf7994d22aec24d3a31ae49827af",
+          "edits": [
+            {
+              "from": "\n          case TargetPlatform.android:\n",
+              "to": "\n          case TargetPlatform.ohos:\n          case TargetPlatform.android:\n",
+              "count": 3
+            },
+            {
+              "from": "\n              case TargetPlatform.android:\n",
+              "to": "\n              case TargetPlatform.ohos:\n              case TargetPlatform.android:\n",
+              "count": 1
+            },
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/text_field.dart",
+          "before": "6fb1f76115d343281348db198e9f95395fd2564138f89905baf1b35ac6b97976",
+          "after": "486eb64c1bd16d749a56949df3f1f8360cbd32c4615401b2dac607c18ab347ad",
+          "edits": [
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 5
+            }
+          ]
+        },
+        {
+          "path": "lib/src/theme_data.dart",
+          "before": "7568b44950aecc970779ef3301aedd6e73af2739192281e674a8209dd4903420",
+          "after": "aa2d2dd120aff6595f536b2fe9363661846c502a97ff888442c73eaf3cf1caf1",
+          "edits": [
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 1
+            },
+            {
+              "from": "\n    final bool useInkSparkle = platform == TargetPlatform.android && !kIsWeb;\n",
+              "to": "\n    final bool useInkSparkle = (platform == TargetPlatform.android || platform == TargetPlatform.ohos) && !kIsWeb;\n",
+              "count": 1
+            },
+            {
+              "from": "\n      TargetPlatform.android || TargetPlatform.iOS || TargetPlatform.fuchsia => standard,\n",
+              "to": "\n      TargetPlatform.ohos || TargetPlatform.android || TargetPlatform.iOS || TargetPlatform.fuchsia => standard,\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/time_picker.dart",
+          "before": "a86f0c982a6fbcf802aae49836dc7a49fee833d0a89e077ba7c4408cee10aa52",
+          "after": "9002a1f7d36c486e364d1c80029f6b9c3aa3d3298fdcd126732e11adf0100135",
+          "edits": [
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/tooltip.dart",
+          "before": "c89e4d28c3f0234d9078625422fe0efb732bf92c458f359bcfd6dc39d26e35a1",
+          "after": "5f769778ef2d11f261f3e3fbcf2d5b9da712d2c1fda733152b03b8cc8670078d",
+          "edits": [
+            {
+              "from": "\n      TargetPlatform.android || TargetPlatform.fuchsia || TargetPlatform.iOS => 32.0,\n",
+              "to": "\n      TargetPlatform.ohos || TargetPlatform.android || TargetPlatform.fuchsia || TargetPlatform.iOS => 32.0,\n",
+              "count": 1
+            },
+            {
+              "from": "\n      TargetPlatform.android ||\n",
+              "to": "\n      TargetPlatform.ohos || TargetPlatform.android ||\n",
+              "count": 1
+            },
+            {
+              "from": "\n      TargetPlatform.android || TargetPlatform.fuchsia || TargetPlatform.iOS => 14.0,\n",
+              "to": "\n      TargetPlatform.ohos || TargetPlatform.android || TargetPlatform.fuchsia || TargetPlatform.iOS => 14.0,\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/typography.dart",
+          "before": "2a16ac6651f0f1f63c8a24ad78aee8ec583063d9c4e5437092a475abfc79840f",
+          "after": "f32f1397ca74a1f20ed0cf4aef124cfbd68c50607376835e31271b2fbde8e60f",
+          "edits": [
+            {
+              "from": "\n      TargetPlatform.android ||\n",
+              "to": "\n      TargetPlatform.ohos || TargetPlatform.android ||\n",
+              "count": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "cupertino_ui",
+      "version": "1.1.1",
+      "files": [
+        {
+          "path": "lib/src/adaptive_text_selection_toolbar.dart",
+          "before": "e590588c6332b6a5f77cc480b386e4d78ca562aa97bf4d0b7718df2f0ef85074",
+          "after": "8421364d5bda357b74551679f6edb6e92c131a69418dce701674edb1c744773c",
+          "edits": [
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "path": "lib/src/app.dart",
+          "before": "36602139c23ccdd9edf6ab253fd2a99d6fbac37c22a506d12d97b398bac285c2",
+          "after": "c07b220b916eb312db06ad49997944f8a503515ce61659b25959e7488e83ef3f",
+          "edits": [
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/button.dart",
+          "before": "d2895e1581faf651bc20faa3e928942b12466105c97a0c7f7e7bba006f3f697d",
+          "after": "281c0ed88973461ed60a0179a2041340de91a94a0f0321f5fc24c2c54d7500dd",
+          "edits": [
+            {
+              "from": "\n      TargetPlatform.android ||\n",
+              "to": "\n      TargetPlatform.ohos || TargetPlatform.android ||\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/checkbox.dart",
+          "before": "be2ee79dbfced44fd9ea5ed567abe27b47ff89c2cfcd75fe666950cf815374fa",
+          "after": "91f41effcfa2b99c047c00a819dd66a8cd8ba28f2b5b305172a7b801d7d32916",
+          "edits": [
+            {
+              "from": "\n          TargetPlatform.android ||\n",
+              "to": "\n          TargetPlatform.ohos || TargetPlatform.android ||\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/dialog.dart",
+          "before": "6441c9871db608362965318413d27d4b6f730e71019bb4841cf89aa7a5961575",
+          "after": "73f5e3d95e720e0700873615209ecd437e2414d667da6b4e24eb783ccfbb9f38",
+          "edits": [
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "path": "lib/src/expansion_tile.dart",
+          "before": "f295218106ee6b16706cf2d00dc33fb5e2f9d566d1e61762a51e27087c9105de",
+          "after": "07a60033101ebf83a852ee0f76b3f751476c6b436c14d0dabcdc5314104548da",
+          "edits": [
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/menu_anchor.dart",
+          "before": "c9f014b42f528d9b3ccf7d237154c57a887f042dc7a76060dbc56d0b4f81feda",
+          "after": "23327135e330902a52c942e5c9b1bc549593bc7537f1083eff090b8a87b4c056",
+          "edits": [
+            {
+              "from": "\n    case TargetPlatform.android:\n",
+              "to": "\n    case TargetPlatform.ohos:\n    case TargetPlatform.android:\n",
+              "count": 1
+            },
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/picker.dart",
+          "before": "8516017c0b019711d8c925f97ecfbd70a4474e503920f2eb0ccda2e8fb2c520d",
+          "after": "ddbe50aa26eab579f04a37c1d97285d3f181748f0bc9dd58fc4eb63864647529",
+          "edits": [
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/slider.dart",
+          "before": "03f7c0b4d28b487c53be5c03bb8774fc9ae169f42fb65f30ab4e07a25a117502",
+          "after": "90abb6aade77749e6db5d726acd74db885e67cfec98d1b2a01f35c98516b00db",
+          "edits": [
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/switch.dart",
+          "before": "2cf7d459be7be57dd9b9b0aebdf9c3dc035ae04ca22e8fe49e74fc69cbfe0232",
+          "after": "99a0d51f9a9f6716c530f9e22ed68019473456f3eb59d4509cf2562613258a37",
+          "edits": [
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "path": "lib/src/text_field.dart",
+          "before": "74d08974f0f66deb4818817e16460d7df5fc2c1639647f8a959bb1e51a5773a4",
+          "after": "5985a11a531c296fc945cb6299bda7086588483963a965f779b7188f6cfb05ba",
+          "edits": [
+            {
+              "from": "\n            case TargetPlatform.android:\n",
+              "to": "\n            case TargetPlatform.ohos:\n            case TargetPlatform.android:\n",
+              "count": 1
+            },
+            {
+              "from": "\n      case TargetPlatform.android:\n",
+              "to": "\n      case TargetPlatform.ohos:\n      case TargetPlatform.android:\n",
+              "count": 3
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

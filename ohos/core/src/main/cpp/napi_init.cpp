@@ -119,19 +119,21 @@ static napi_value InvokeAction(napi_env env, napi_callback_info info) {
     napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
     InvokeInterface *invokeInterface = new InvokeInterface();
     napi_create_threadsafe_function(env, argv[0], nullptr, CreateValueStringUtf8(env, "onResult"), 0, 1, nullptr, nullptr, nullptr, InvokeActionCallJsCallback, &invokeInterface->onResult);
-    invokeAction(invokeInterface, GetValueStringUtf8(env, argv[1]));
+    invokeMethod(invokeInterface, GetValueStringUtf8(env, argv[1]));
     return nullptr;
 }
 
 static napi_value StartTUN(napi_env env, napi_callback_info info) {
-    size_t argc = 6;
-    napi_value argv[6] = {nullptr};
+    size_t argc = 7;
+    napi_value argv[7] = {nullptr};
     napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
     TunInterface *tunInterface = new TunInterface();
     napi_create_threadsafe_function(env, argv[0], nullptr, CreateValueStringUtf8(env, "protect"), 0, 1, nullptr, nullptr, nullptr, ProtectCallJsCallback, &tunInterface->protect);
     napi_create_threadsafe_function(env, argv[1], nullptr, CreateValueStringUtf8(env, "resolverProcess"), 0, 1, nullptr, nullptr, nullptr, ResolveProcessCallJsCallback, &tunInterface->resolverProcess);
-    startTUN(tunInterface, GetValueInt32(env, argv[2]), GetValueStringUtf8(env, argv[3]), GetValueStringUtf8(env, argv[4]), GetValueStringUtf8(env, argv[5]));
-    return nullptr;
+    bool started = startTUN(tunInterface, GetValueInt32(env, argv[2]), GetValueStringUtf8(env, argv[3]), GetValueStringUtf8(env, argv[4]), GetValueStringUtf8(env, argv[5]), GetValueStringUtf8(env, argv[6]));
+    napi_value result = nullptr;
+    napi_get_boolean(env, started, &result);
+    return result;
 }
 
 static napi_value QuickSetup(napi_env env, napi_callback_info info) {
@@ -167,7 +169,9 @@ static napi_value GetTotalTraffic(napi_env env, napi_callback_info info) {
     napi_value argv[1] = {nullptr};
     napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
     char *data = getTotalTraffic(GetValueBool(env, argv[0]));
-    return CreateValueStringUtf8(env, data);
+    napi_value result = CreateValueStringUtf8(env, data);
+    free(data);
+    return result;
 }
 
 static napi_value GetTraffic(napi_env env, napi_callback_info info) {
@@ -175,7 +179,9 @@ static napi_value GetTraffic(napi_env env, napi_callback_info info) {
     napi_value argv[1] = {nullptr};
     napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
     char *data = getTraffic(GetValueBool(env, argv[0]));
-    return CreateValueStringUtf8(env, data);
+    napi_value result = CreateValueStringUtf8(env, data);
+    free(data);
+    return result;
 }
 
 static napi_value StopTun(napi_env env, napi_callback_info info) {
@@ -256,7 +262,7 @@ EXTERN_C_START
 static napi_value Init(napi_env env, napi_value exports)
 {
     napi_property_descriptor desc[] = {
-        { "invokeAction", nullptr, InvokeAction, nullptr, nullptr, nullptr, napi_default, nullptr },
+        { "invokeMethod", nullptr, InvokeAction, nullptr, nullptr, nullptr, napi_default, nullptr },
         { "startTUN", nullptr, StartTUN, nullptr, nullptr, nullptr, napi_default, nullptr },
         { "quickSetup", nullptr, QuickSetup, nullptr, nullptr, nullptr, napi_default, nullptr },
         { "setEventListener", nullptr, SetEventListener, nullptr, nullptr, nullptr, napi_default, nullptr },

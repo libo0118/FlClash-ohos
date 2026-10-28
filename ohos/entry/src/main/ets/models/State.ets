@@ -33,6 +33,8 @@ export class VpnOptions {
   bypassDomain: string[] = []
   stack: string = ""
   routeAddress: string[] = []
+  mtu: number = 9000
+  congestionController: string = ''
   easyTier: EasyTierProps = new EasyTierProps()
   easyTierRouteConfigTag: string = ''
 

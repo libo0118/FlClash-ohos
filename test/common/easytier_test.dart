@@ -155,14 +155,18 @@ void main() {
       isEasyTierConfigValid(automatic.copyWith(cidrs: ['192.168.6.183/24'])),
       false,
     );
-    final config = <String, dynamic>{'rules': ['MATCH,DIRECT']};
+    final config = <String, dynamic>{
+      'rules': ['MATCH,DIRECT'],
+    };
     applyEasyTierConfig(config, automatic);
     expect(config['rules'], ['MATCH,DIRECT']);
     expect((config['proxies'] as List).single['udp'], true);
   });
 
   test('learned routes merge with manual routes before withdrawn guards', () {
-    final config = <String, dynamic>{'rules': ['MATCH,subscription']};
+    final config = <String, dynamic>{
+      'rules': ['MATCH,subscription'],
+    };
     applyEasyTierConfig(
       config,
       enabledEasyTier,
@@ -195,7 +199,9 @@ void main() {
 
   test('active and manual nested routes precede overlapping REJECT guards', () {
     for (final manual in [false, true]) {
-      final config = <String, dynamic>{'rules': ['MATCH,subscription']};
+      final config = <String, dynamic>{
+        'rules': ['MATCH,subscription'],
+      };
       final props = enabledEasyTier.copyWith(
         cidrs: manual ? ['192.168.0.0/16'] : [],
       );
@@ -213,34 +219,31 @@ void main() {
     }
   });
 
-  test(
-    'enabled integration preserves manual CIDRs and existing proxies',
-    () {
-      final config = <String, dynamic>{
-        'mode': 'direct',
-        'rules': ['MATCH,subscription'],
-        'proxies': [
-          {'name': 'subscription', 'type': 'ss'},
-        ],
-      };
-      applyEasyTierConfig(config, enabledEasyTier);
-      expect(config['mode'], 'rule');
-      expect(config['rules'], [
-        'IP-CIDR,10.144.144.0/24,$easyTierProxyName,no-resolve',
-        'IP-CIDR,192.168.50.0/24,$easyTierProxyName,no-resolve',
-        'MATCH,subscription',
-      ]);
-      final proxies = config['proxies'] as List;
-      expect(proxies.first, {'name': 'subscription', 'type': 'ss'});
-      expect(proxies.last, {
-        'name': easyTierProxyName,
-        'type': 'socks5',
-        'server': '127.0.0.1',
-        'port': easyTierSocksPort,
-        'udp': true,
-      });
-    },
-  );
+  test('enabled integration preserves manual CIDRs and existing proxies', () {
+    final config = <String, dynamic>{
+      'mode': 'direct',
+      'rules': ['MATCH,subscription'],
+      'proxies': [
+        {'name': 'subscription', 'type': 'ss'},
+      ],
+    };
+    applyEasyTierConfig(config, enabledEasyTier);
+    expect(config['mode'], 'rule');
+    expect(config['rules'], [
+      'IP-CIDR,10.144.144.0/24,$easyTierProxyName,no-resolve',
+      'IP-CIDR,192.168.50.0/24,$easyTierProxyName,no-resolve',
+      'MATCH,subscription',
+    ]);
+    final proxies = config['proxies'] as List;
+    expect(proxies.first, {'name': 'subscription', 'type': 'ss'});
+    expect(proxies.last, {
+      'name': easyTierProxyName,
+      'type': 'socks5',
+      'server': '127.0.0.1',
+      'port': easyTierSocksPort,
+      'udp': true,
+    });
+  });
 
   test('subscription name collisions preserve the existing proxy', () {
     final config = <String, dynamic>{
@@ -296,7 +299,6 @@ void main() {
               'rules': ['MATCH,subscription'],
             },
             realPatchConfig: const PatchClashConfig(mode: Mode.global),
-            overrideDns: false,
             appendSystemDns: false,
             proxyGroups: [],
             rules: custom ? [Rule.parse('MATCH,DIRECT')] : [],
@@ -309,30 +311,33 @@ void main() {
         );
         final expectedLastRule = custom ? 'MATCH,DIRECT' : 'MATCH,subscription';
         expect(
-          result.a,
+          result.yaml,
           contains('IP-CIDR,10.144.144.0/24,$easyTierProxyName,no-resolve'),
         );
-        expect(result.a, contains(expectedLastRule));
+        expect(result.yaml, contains(expectedLastRule));
         expect(
-          result.a,
+          result.yaml,
           contains('IP-CIDR,192.168.6.0/24,$easyTierProxyName,no-resolve'),
         );
-        expect(result.a, contains('IP-CIDR,172.20.0.0/16,REJECT,no-resolve'));
         expect(
-          result.a.indexOf('IP-CIDR,192.168.6.0/24'),
-          lessThan(result.a.indexOf('IP-CIDR,172.20.0.0/16,REJECT')),
+          result.yaml,
+          contains('IP-CIDR,172.20.0.0/16,REJECT,no-resolve'),
         );
         expect(
-          result.a.indexOf('IP-CIDR,172.20.0.0/16,REJECT'),
-          lessThan(result.a.indexOf(expectedLastRule)),
+          result.yaml.indexOf('IP-CIDR,192.168.6.0/24'),
+          lessThan(result.yaml.indexOf('IP-CIDR,172.20.0.0/16,REJECT')),
         );
         expect(
-          result.a.indexOf('IP-CIDR,10.144.144.0/24'),
-          lessThan(result.a.indexOf(expectedLastRule)),
+          result.yaml.indexOf('IP-CIDR,172.20.0.0/16,REJECT'),
+          lessThan(result.yaml.indexOf(expectedLastRule)),
         );
-        expect(result.a, contains('127.0.0.1'));
-        expect(result.a, contains('17890'));
-        if (!custom) expect(result.a, contains('DOMAIN,example.com,DIRECT'));
+        expect(
+          result.yaml.indexOf('IP-CIDR,10.144.144.0/24'),
+          lessThan(result.yaml.indexOf(expectedLastRule)),
+        );
+        expect(result.yaml, contains('127.0.0.1'));
+        expect(result.yaml, contains('17890'));
+        if (!custom) expect(result.yaml, contains('DOMAIN,example.com,DIRECT'));
       },
     );
   }

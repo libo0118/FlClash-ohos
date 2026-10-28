@@ -16,10 +16,10 @@ class ProfileUpdateQueue {
     required this.onError,
   });
 
-  Future<void> run(Future<void> Function() action) {
+  Future<T> run<T>(Future<T> Function() action) {
     final next = _tail.then((_) => action());
     // A failed profile must not prevent a later correction from running.
-    _tail = next.catchError((Object _, StackTrace _) {});
+    _tail = next.then<void>((_) {}, onError: (Object _, StackTrace _) {});
     return next;
   }
 
@@ -33,11 +33,13 @@ class ProfileUpdateQueue {
     _timer?.cancel();
     _timer = Timer(const Duration(milliseconds: 250), () {
       _timer = null;
-      unawaited(run(() async {
-        if (_disposed || !_pending || !canRefresh()) return;
-        _pending = false;
-        await refresh();
-      }).catchError(onError));
+      unawaited(
+        run(() async {
+          if (_disposed || !_pending || !canRefresh()) return;
+          _pending = false;
+          await refresh();
+        }).catchError(onError),
+      );
     });
   }
 

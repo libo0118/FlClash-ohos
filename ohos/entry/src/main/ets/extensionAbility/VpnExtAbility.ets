@@ -3,7 +3,7 @@ import { Want, bundleManager } from '@kit.AbilityKit'
 import { rpc } from '@kit.IPCKit'
 import { deviceInfo } from '@kit.BasicServicesKit'
 import { util } from '@kit.ArkTS'
-import { setEventListener, invokeAction, startTUN, stopTun, forceGC, suspend, updateDns, quickSetup } from 'core'
+import { setEventListener, invokeMethod, startTUN, stopTun, forceGC, suspend, updateDns, quickSetup } from 'core'
 import { AccessControlMode, VpnOptions } from '../models/State'
 import { ChunkedSender, ChunkedReader } from '../utils/Rpc'
 import AbilityConstant from '@ohos.app.ability.AbilityConstant';
@@ -32,7 +32,7 @@ interface DiagnosticEvent {
 
 interface DiagnosticMessage {
   method: string
-  data: DiagnosticEvent
+  arguments: DiagnosticEvent
 }
 
 interface EasyTierRouteEvent {
@@ -42,11 +42,11 @@ interface EasyTierRouteEvent {
 
 interface EasyTierRouteMessage {
   method: string
-  data: EasyTierRouteEvent
+  arguments: EasyTierRouteEvent
 }
 
 export enum RPCType{
-  invokeAction,
+  invokeMethod,
   quickSetup,
   updateNotificationParams,
   startService,
@@ -70,11 +70,11 @@ export class ServiceStub extends rpc.RemoteObject {
       const remote = send.readRemoteObject() as rpc.RemoteObject
       this.parent.handleSetEventListener(remote)
       return true
-    } else if (code === RPCType.invokeAction) {
+    } else if (code === RPCType.invokeMethod) {
       const data = this.reader.read(send)
       if (data === null) return true
       const remote = send.readRemoteObject() as rpc.RemoteObject
-      this.parent.handleInvokeAction(data, remote)
+      this.parent.handleInvokeMethod(data, remote)
       return true
     } else if (code === RPCType.startService) {
       const raw = this.reader.read(send)
@@ -209,7 +209,7 @@ export default class VpnExtAbility extends VpnExtensionAbility {
       addresses,
       routes,
       dnsAddresses,
-      mtu: 9000,
+      mtu: options.mtu > 0 ? options.mtu : 9000,
       isIPv4Accepted: true,
       isIPv6Accepted: options.ipv6,
       isBlocking: !options.allowBypass,
@@ -282,7 +282,7 @@ export default class VpnExtAbility extends VpnExtensionAbility {
         dateTime: new Date().toISOString(),
       }
       const event: DiagnosticEvent = { type: 'log', data: row }
-      const envelope: DiagnosticMessage = { method: 'message', data: event }
+      const envelope: DiagnosticMessage = { method: 'message', arguments: event }
       this.diagnosticBacklog.push(JSON.stringify(envelope))
       if (this.diagnosticBacklog.length > 100) this.diagnosticBacklog.shift()
       this.flushDiagnosticLogs().catch(() => {})
@@ -323,8 +323,12 @@ export default class VpnExtAbility extends VpnExtensionAbility {
   }
 
   private recordRoutes(snapshot: EasyTierRouteSnapshot): void {
+    const cardStatus = snapshot.status === 'ready'
+      ? snapshot.peerStatus === 'ready' ? 'ready' : 'unavailable'
+      : snapshot.status
+    try { new VpnCardManager(this.context).setEasyTierStatus(cardStatus) } catch (_) {}
     const event: EasyTierRouteEvent = { type: 'easyTierRoutes', data: snapshot }
-    const envelope: EasyTierRouteMessage = { method: 'message', data: event }
+    const envelope: EasyTierRouteMessage = { method: 'message', arguments: event }
     this.latestRouteSnapshot = JSON.stringify(envelope)
     this.flushDiagnosticLogs().catch(() => {})
   }
@@ -350,8 +354,8 @@ export default class VpnExtAbility extends VpnExtensionAbility {
     this.flushDiagnosticLogs().catch(() => {})
   }
 
-  handleInvokeAction(data: string, remote: rpc.RemoteObject): void {
-    invokeAction((callbackData: string) => { this.sendCallback(remote, callbackData) }, data)
+  handleInvokeMethod(data: string, remote: rpc.RemoteObject): void {
+    invokeMethod((callbackData: string) => { this.sendCallback(remote, callbackData) }, data)
   }
 
   private enqueue(action: () => Promise<void>, remote?: rpc.RemoteObject, networkSecret: string = ''): void {
@@ -425,14 +429,16 @@ export default class VpnExtAbility extends VpnExtensionAbility {
           }
           stage = 'VPN 启动代理 TUN'
           this.recordDiagnostic('VPN', 'info', stage)
-          startTUN(
+          const tunStarted = startTUN(
             (socketFd: number): Promise<void> => connection.protect(socketFd),
             (protocol: number, source: string, target: string, uid: number) => this.resolverProcess(protocol, source, target, uid),
             fd,
             vpnOptions.stack,
             this.toTunAddress(vpnOptions),
             this.toTunDns(vpnOptions),
+            JSON.stringify({ mtu: vpnOptions.mtu, 'congestion-controller': vpnOptions.congestionController }),
           )
+          if (!tunStarted) throw new Error('Mihomo TUN 启动失败')
           this.tunStarted = true
           if (vpnOptions.easyTier?.enable) {
             stage = 'EasyTier 启动'

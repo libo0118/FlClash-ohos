@@ -47,6 +47,12 @@
     {
       "name": "widget_open",
       "value": "Приложение"
-    }
+    },
+    {"name":"widget_easytier_ready","value":"Готово"},
+    {"name":"widget_easytier_starting","value":"Подключение…"},
+    {"name":"widget_easytier_stopped","value":"Остановлено"},
+    {"name":"widget_easytier_unavailable","value":"Недоступно"},
+    {"name":"widget_easytier_unknown","value":"Неизвестно"},
+    {"name":"widget_unknown","value":"Статус VPN неизвестен · откройте приложение"}
   ]
 }

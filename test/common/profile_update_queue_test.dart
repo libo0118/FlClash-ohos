@@ -26,10 +26,12 @@ void main() {
     await check;
     await second;
     expect(order, [1, 2]);
+    expect(await queue.run(() async => false), false);
   });
 
-  testWidgets('startup queues the latest routes without waiting on reload',
-      (tester) async {
+  testWidgets('startup queues the latest routes without waiting on reload', (
+    tester,
+  ) async {
     var ready = false;
     var revision = 1;
     final applied = <int>[];
@@ -57,8 +59,9 @@ void main() {
     expect(applied, [2]);
   });
 
-  testWidgets('changes during a refresh follow it without parallel writes',
-      (tester) async {
+  testWidgets('changes during a refresh follow it without parallel writes', (
+    tester,
+  ) async {
     var revision = 1;
     final applied = <int>[];
     final firstDone = Completer<void>();
@@ -84,13 +87,16 @@ void main() {
     expect(applied, [1, 3]);
   });
 
-  testWidgets('stop defers refresh, resume retries, dispose cancels',
-      (tester) async {
+  testWidgets('stop defers refresh, resume retries, dispose cancels', (
+    tester,
+  ) async {
     var ready = true;
     var count = 0;
     final queue = ProfileUpdateQueue(
       canRefresh: () => ready,
-      refresh: () async { count++; },
+      refresh: () async {
+        count++;
+      },
       onError: (error, stack) => fail('$error'),
     );
     queue.requestRefresh();

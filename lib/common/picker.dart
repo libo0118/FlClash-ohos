@@ -11,32 +11,31 @@ class Picker {
     return FilePicker.pickFile(initialDirectory: await appPath.downloadDirPath);
   }
 
-  Future<String?> saveFile(String fileName, Uint8List bytes) async {
+  Future<Uri?> saveFile(String fileName, Uint8List bytes) async {
     final path = await FilePicker.saveFile(
       fileName: fileName,
       initialDirectory: await appPath.downloadDirPath,
       bytes: bytes,
     );
-    if (!system.isAndroid && !system.isOhos && path != null) {
-      final file = File(path);
-      await file.safeWriteAsBytes(bytes);
+    if (path == null) {
+      return null;
     }
-    return path;
+    if (RegExp(r'^[A-Za-z]:[\\/]').hasMatch(path) || path.startsWith(r'\\')) {
+      return Uri.file(path, windows: true);
+    }
+    final uri = Uri.tryParse(path);
+    return uri != null && uri.hasScheme ? uri : Uri.file(path);
   }
 
-  Future<String?> saveFileWithPath(String fileName, String localPath) async {
+  Future<Uri?> saveFileWithPath(String fileName, String localPath) async {
     final localFile = File(localPath);
     if (!await localFile.exists()) {
       await localFile.create(recursive: true);
     }
     final bytes = await localFile.readAsBytes();
-    final path = await FilePicker.saveFile(
-      fileName: fileName,
-      initialDirectory: await appPath.downloadDirPath,
-      bytes: bytes,
-    );
+    final uri = await saveFile(fileName, bytes);
     await localFile.safeDelete();
-    return path;
+    return uri;
   }
 
   Future<String?> pickerConfigQRCode() async {
@@ -44,16 +43,19 @@ class Picker {
     if (xFile == null) {
       return null;
     }
-    final controller = MobileScannerController();
-    final capture = await controller.analyzeImage(
+    // Not through a throwaway MobileScannerController: disposing one clears
+    // the platform scan window of a scanner page that is still open.
+    final capture = await MobileScannerPlatform.instance.analyzeImage(
       xFile.path,
-      formats: [BarcodeFormat.qrCode],
+      formats: const [BarcodeFormat.qrCode],
     );
-    final result = capture?.barcodes.first.rawValue;
-    if (result == null || !result.isUrl) {
-      throw currentAppLocalizations.pleaseUploadValidQrcode;
+    final url = profileUrlFromQrCodes(
+      capture?.barcodes.map((barcode) => barcode.rawValue) ?? const [],
+    );
+    if (url == null) {
+      throw MessageException(currentAppLocalizations.pleaseUploadValidQrcode);
     }
-    return result;
+    return url;
   }
 }
 

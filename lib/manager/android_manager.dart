@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/core/core.dart';
 import 'package:fl_clash/enum/enum.dart';
@@ -5,7 +7,7 @@ import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/plugins/app.dart';
 import 'package:fl_clash/plugins/service.dart';
 import 'package:fl_clash/providers/providers.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class AndroidManager extends ConsumerStatefulWidget {
@@ -36,20 +38,43 @@ class _AndroidContainerState extends ConsumerState<AndroidManager>
     ) {
       app?.updateExcludeFromRecents(next);
     }, fireImmediately: true);
+    ref.listenManual(loadedLocaleProvider, (prev, next) {
+      if (prev != null && prev != next && !safeModeBuild) {
+        app?.initShortcuts();
+      }
+    });
     ref.listenManual(sharedStateProvider, (prev, next) {
       if (prev != next) {
         debouncer.call(FunctionTag.saveSharedFile, () async {
-          preferences.saveShareState(next);
+          await preferences.saveShareState(next);
         }, duration: const Duration(seconds: 1));
         if (prev?.needSyncSharedState != next.needSyncSharedState) {
           service?.syncState(next.needSyncSharedState);
         }
       }
     });
+    app?.onPackagesChanged = _reloadPackages;
+  }
+
+  /// A reload reads every installed app's label, and a round of store updates
+  /// reports each app on its own.
+  void _reloadPackages() {
+    if (ref.read(packagesProvider).isEmpty) {
+      return;
+    }
+    debouncer.call(FunctionTag.reloadPackages, () async {
+      if (mounted) {
+        await ref.read(systemActionProvider.notifier).getPackages();
+      }
+    }, duration: const Duration(seconds: 2));
   }
 
   @override
-  Future<void> dispose() async {
+  void dispose() {
+    debouncer.cancel(FunctionTag.reloadPackages);
+    if (app?.onPackagesChanged == _reloadPackages) {
+      app?.onPackagesChanged = null;
+    }
     service?.removeListener(this);
     if (system.isOhos) service?.setVpnCardReady(false);
     super.dispose();
@@ -59,6 +84,12 @@ class _AndroidContainerState extends ConsumerState<AndroidManager>
   void onServiceEvent(CoreEvent event) {
     coreEventManager.sendEvent(event);
     super.onServiceEvent(event);
+  }
+
+  @override
+  void onServiceStopped() {
+    unawaited(ref.read(setupActionProvider.notifier).setRunning(false));
+    super.onServiceStopped();
   }
 
   @override
@@ -76,13 +107,14 @@ class _AndroidContainerState extends ConsumerState<AndroidManager>
     var status = '';
     try {
       if (!ref.read(initProvider) ||
-          (enable && (ref.read(profilesProvider).isEmpty ||
-              !ref.read(vpnSettingProvider).enable))) {
+          (enable &&
+              (ref.read(profilesProvider).isEmpty ||
+                  !ref.read(vpnSettingProvider).enable))) {
         status = 'openRequired';
       } else {
         final running = await service?.getRunTime() != null;
         if (running != enable) {
-          await ref.read(setupActionProvider.notifier).updateStatus(enable);
+          await ref.read(setupActionProvider.notifier).setRunning(enable);
         }
         if ((await service?.getRunTime() != null) != enable) status = 'failed';
       }

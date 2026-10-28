@@ -1,11 +1,11 @@
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/common/easytier.dart';
 import 'package:fl_clash/enum/enum.dart';
+import 'package:fl_clash/features/form/form.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
-import 'package:fl_clash/state.dart';
 import 'package:fl_clash/widgets/widgets.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class EasyTierPage extends StatelessWidget {
@@ -14,7 +14,15 @@ class EasyTierPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => CommonScaffold(
     title: context.appLocalizations.easyTierConfiguration,
-    body: ListView(children: const [EasyTierSettings()]),
+    body: Builder(
+      builder: (context) => ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 16).copyWith(
+          top: context.sectionsTopPadding,
+          bottom: 16 + context.bottomInset,
+        ),
+        children: const [EasyTierSettings()],
+      ),
+    ),
   );
 }
 
@@ -29,15 +37,16 @@ class EasyTierSettings extends ConsumerWidget {
   }) async {
     final l10n = context.appLocalizations;
     if (ref.read(isStartProvider)) {
-      globalState.showNotifier(l10n.easyTierStopBeforeEditing);
+      context.showNotifier(l10n.easyTierStopBeforeEditing);
       return;
     }
     var props = ref.read(appSettingProvider).easyTier;
     if (ipv6 != null) {
       props = props.copyWith(ipv6: ipv6);
     } else if (enable == null || (enable && !isEasyTierConfigValid(props))) {
-      final result = await globalState.showCommonDialog<EasyTierProps>(
-        child: EasyTierConfigurationDialog(
+      final result = await showFormSheet<EasyTierProps>(
+        context: context,
+        builder: (_) => EasyTierConfigurationDialog(
           props: props.copyWith(enable: enable ?? props.enable),
         ),
       );
@@ -55,7 +64,7 @@ class EasyTierSettings extends ConsumerWidget {
         patch.redirPort,
         patch.tproxyPort,
       ].contains(easyTierSocksPort)) {
-        globalState.showNotifier(l10n.portConflictTip);
+        context.showNotifier(l10n.portConflictTip);
         return;
       }
       ref
@@ -82,51 +91,61 @@ class EasyTierSettings extends ConsumerWidget {
     final routeStatus = switch (routes.status) {
       'starting' => l10n.easyTierRoutesStarting,
       'ready' => l10n.easyTierRoutesReady,
-      _ => l10n.easyTierRoutesStopped,
+      'stopped' => l10n.easyTierRoutesStopped,
+      _ => l10n.easyTierPeersUnavailableHint,
     };
     return Column(
       children: [
-        ListItem.switchItem(
-          title: const Text('EasyTier'),
-          subtitle: Text(l10n.easyTierDescription),
-          delegate: SwitchDelegate(
-            value: props.enable,
-            onChanged: (value) => _update(context, ref, enable: value),
-          ),
-        ),
-        const Divider(height: 0),
-        ListItem(
-          title: Text(l10n.easyTierConfiguration),
-          subtitle: Text(
-            props.networkName.isEmpty
-                ? l10n.easyTierConfigureHint
-                : [props.networkName, ...props.cidrs].join('\n'),
-          ),
-          onTap: () => _update(context, ref),
-        ),
-        const Divider(height: 0),
-        ListItem.switchItem(
-          title: Text(l10n.easyTierIpv6),
-          subtitle: Text(l10n.easyTierIpv6Description),
-          delegate: SwitchDelegate(
-            value: props.ipv6,
-            onChanged: (value) => _update(context, ref, ipv6: value),
-          ),
-        ),
-        if (props.enable) ...[
-          const Divider(height: 0),
-          ListItem(
-            title: Text(l10n.easyTierLearnedCidrs),
-            subtitle: SelectableText(
-              '$routeStatus\n${routes.activeCidrs.isEmpty ? l10n.easyTierRoutesEmpty : routes.activeCidrs.join('\n')}',
+        generateSection(
+          items: [
+            ConfigToggleItem(
+              title: (l) => 'EasyTier',
+              selector: appSettingProvider.select(
+                (state) => state.easyTier.enable,
+              ),
+              onChanged: (ref, value) => _update(context, ref, enable: value),
             ),
-          ),
-          if (routes.blockedCidrs.isNotEmpty)
             ListItem(
-              title: Text(l10n.easyTierBlockedCidrs),
-              subtitle: SelectableText(routes.blockedCidrs.join('\n')),
+              title: Text(l10n.easyTierConfiguration),
+              subtitle: Text(
+                props.networkName.isEmpty ? l10n.none : props.networkName,
+              ),
+              onTap: () => _update(context, ref),
             ),
-        ],
+          ],
+          footer: l10n.easyTierDescription,
+        ),
+        generateSection(
+          items: [
+            ConfigToggleItem(
+              title: (l) => l.easyTierIpv6,
+              selector: appSettingProvider.select(
+                (state) => state.easyTier.ipv6,
+              ),
+              onChanged: (ref, value) => _update(context, ref, ipv6: value),
+            ),
+          ],
+          footer: l10n.easyTierIpv6Description,
+        ),
+        if (props.enable)
+          generateSection(
+            title: l10n.easyTierLearnedCidrs,
+            items: [
+              ListItem(
+                title: SelectableText(
+                  routes.activeCidrs.isEmpty
+                      ? l10n.easyTierRoutesEmpty
+                      : routes.activeCidrs.join('\n'),
+                ),
+              ),
+              if (routes.blockedCidrs.isNotEmpty)
+                ListItem(
+                  title: Text(l10n.easyTierBlockedCidrs),
+                  subtitle: SelectableText(routes.blockedCidrs.join('\n')),
+                ),
+            ],
+            footer: routeStatus,
+          ),
       ],
     );
   }
@@ -144,7 +163,7 @@ class EasyTierConfigurationDialog extends StatefulWidget {
 
 class _EasyTierConfigurationDialogState
     extends State<EasyTierConfigurationDialog> {
-  final _formKey = GlobalKey<FormState>();
+  String? _error;
   late final TextEditingController _name;
   late final TextEditingController _secret;
   late final TextEditingController _peers;
@@ -169,14 +188,29 @@ class _EasyTierConfigurationDialogState
   }
 
   void _save() {
-    if (_formKey.currentState?.validate() != true) return;
+    final l10n = context.appLocalizations;
+    final peers = splitEasyTierLines(_peers.text);
+    final cidrs = splitEasyTierLines(_cidrs.text);
+    final error = _name.text.trim().isEmpty
+        ? l10n.emptyTip(l10n.easyTierNetworkName)
+        : _secret.text.trim().isEmpty
+        ? l10n.emptyTip(l10n.easyTierNetworkSecret)
+        : peers.isEmpty || !peers.every(isEasyTierPeerUrl)
+        ? l10n.easyTierInvalidPeers
+        : !cidrs.every(isEasyTierCidr)
+        ? l10n.easyTierInvalidCidrs
+        : null;
+    if (error != null) {
+      setState(() => _error = error);
+      return;
+    }
     Navigator.pop(
       context,
       widget.props.copyWith(
         networkName: _name.text.trim(),
         networkSecret: _secret.text,
-        peerUrls: splitEasyTierLines(_peers.text),
-        cidrs: splitEasyTierLines(_cidrs.text),
+        peerUrls: peers,
+        cidrs: cidrs,
       ),
     );
   }
@@ -184,75 +218,64 @@ class _EasyTierConfigurationDialogState
   @override
   Widget build(BuildContext context) {
     final l10n = context.appLocalizations;
-    return CommonDialog(
+    return FormPage(
       title: l10n.easyTierConfiguration,
-      actions: [TextButton(onPressed: _save, child: Text(l10n.save))],
-      child: Form(
-        key: _formKey,
-        child: Wrap(
-          runSpacing: 16,
-          children: [
-            Text(l10n.easyTierConfigureHint),
-            TextFormField(
-              controller: _name,
-              maxLength: 128,
-              decoration: InputDecoration(
-                border: const OutlineInputBorder(),
-                labelText: l10n.easyTierNetworkName,
+      onSave: _save,
+      error: _error,
+      children: [
+        generateSection(
+          items: [
+            FormRow(
+              title: l10n.easyTierNetworkName,
+              trailing: FormRowTextField(
+                controller: _name,
+                autocorrect: false,
+                inputFormatters: TextInputLimits.limit(128),
+                textInputAction: TextInputAction.next,
               ),
-              validator: (value) => value?.trim().isNotEmpty == true
-                  ? null
-                  : l10n.emptyTip(l10n.easyTierNetworkName),
             ),
-            TextFormField(
-              controller: _secret,
-              obscureText: true,
-              enableSuggestions: false,
-              autocorrect: false,
-              maxLength: 256,
-              decoration: InputDecoration(
-                border: const OutlineInputBorder(),
-                labelText: l10n.easyTierNetworkSecret,
+            FormRow(
+              title: l10n.easyTierNetworkSecret,
+              trailing: FormRowSecretTextField(
+                controller: _secret,
+                inputFormatters: TextInputLimits.limit(256),
+                textInputAction: TextInputAction.next,
               ),
-              validator: (value) => value?.trim().isNotEmpty == true
-                  ? null
-                  : l10n.emptyTip(l10n.easyTierNetworkSecret),
             ),
-            TextFormField(
-              controller: _peers,
-              minLines: 2,
-              maxLines: 5,
-              decoration: InputDecoration(
-                border: const OutlineInputBorder(),
-                labelText: l10n.easyTierPeerUrls,
-                hintText: 'tcp://vpn.example.com:11010',
+          ],
+          footer: l10n.easyTierConfigureHint,
+        ),
+        generateSection(
+          title: l10n.easyTierPeerUrls,
+          items: [
+            ListItem(
+              title: TextFormField(
+                controller: _peers,
+                autocorrect: false,
+                maxLines: null,
+                decoration: const InputDecoration.collapsed(
+                  hintText: 'tcp://vpn.example.com:11010',
+                ),
               ),
-              validator: (value) {
-                final peers = splitEasyTierLines(value ?? '');
-                return peers.isNotEmpty && peers.every(isEasyTierPeerUrl)
-                    ? null
-                    : l10n.easyTierInvalidPeers;
-              },
-            ),
-            TextFormField(
-              controller: _cidrs,
-              minLines: 2,
-              maxLines: 5,
-              decoration: InputDecoration(
-                border: const OutlineInputBorder(),
-                labelText: l10n.easyTierCidrs,
-                hintText: '10.144.144.0/24\n192.168.50.0/24',
-              ),
-              validator: (value) {
-                final cidrs = splitEasyTierLines(value ?? '');
-                return cidrs.every(isEasyTierCidr)
-                    ? null
-                    : l10n.easyTierInvalidCidrs;
-              },
             ),
           ],
         ),
-      ),
+        generateSection(
+          title: l10n.easyTierCidrs,
+          items: [
+            ListItem(
+              title: TextFormField(
+                controller: _cidrs,
+                autocorrect: false,
+                maxLines: null,
+                decoration: const InputDecoration.collapsed(
+                  hintText: '10.144.144.0/24\n192.168.50.0/24',
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

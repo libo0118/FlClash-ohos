@@ -60,8 +60,8 @@ const context = vm.createContext({
   setTimeout: (callback, delay) => schedule(callback, delay), clearTimeout: (id) => clock.timers.delete(id),
   setInterval: (callback, delay) => schedule(callback, delay, true), clearInterval: (id) => clock.timers.delete(id),
   setEventListener: (callback) => { coreListener = callback },
-  invokeAction: (callback, data) => callback(data), quickSetup: (callback, _init, data) => callback(data),
-  startTUN() {}, stopTun() {}, suspend() {}, updateDns() {},
+  invokeMethod: (callback, data) => callback(data), quickSetup: (callback, _init, data) => callback(data),
+  startTUN() { return true }, stopTun() {}, suspend() {}, updateDns() {},
 })
 const root = path.join(__dirname, '../entry/src/main/ets')
 for (const file of ['utils/Rpc.ets', 'managers/EasyTierManager.ets', 'managers/VpnCardManager.ets', 'entryability/EntryAbility.ets', 'extensionAbility/VpnExtAbility.ets', 'plugins/ServicePlugin.ets']) {
@@ -118,8 +118,8 @@ function remoteRecorder() {
 function validateEnvelope(raw) {
   const envelope = JSON.parse(raw)
   assert.equal(envelope.method, 'message')
-  assert.equal(envelope.data.type, 'log')
-  const row = envelope.data.data
+  assert.equal(envelope.arguments.type, 'log')
+  const row = envelope.arguments.data
   assert.ok(['info', 'warning', 'error', 'debug'].includes(row.LogLevel))
   assert.match(row.Payload, /^\[(EasyTier|VPN)\] /)
   assert.ok(Number.isFinite(Date.parse(row.dateTime)))
@@ -127,11 +127,11 @@ function validateEnvelope(raw) {
   assert.ok(row.Payload.length <= 2400)
   return row
 }
-function logRows(calls) { return calls.filter((raw) => JSON.parse(raw).data.type === 'log').map(validateEnvelope) }
+function logRows(calls) { return calls.filter((raw) => JSON.parse(raw).arguments.type === 'log').map(validateEnvelope) }
 function routeEvents(calls) {
-  return calls.map((raw) => JSON.parse(raw)).filter((envelope) => envelope.data.type === 'easyTierRoutes').map((envelope) => {
+  return calls.map((raw) => JSON.parse(raw)).filter((envelope) => envelope.arguments.type === 'easyTierRoutes').map((envelope) => {
     assert.equal(envelope.method, 'message')
-    const snapshot = envelope.data.data
+    const snapshot = envelope.arguments.data
     assert.equal(typeof snapshot.sessionId, 'string')
     assert.ok(snapshot.sessionId.length > 0)
     assert.ok(Number.isInteger(snapshot.revision) && snapshot.revision > 0)
@@ -481,7 +481,7 @@ async function main() {
   await settle()
   assert.deepEqual(routeEvents(replayRemote.calls), [routes.at(-1)])
   assert.equal(logRows(replayRemote.calls).length, 100)
-  assert.equal(JSON.parse(replayRemote.calls[0]).data.type, 'easyTierRoutes')
+  assert.equal(JSON.parse(replayRemote.calls[0]).arguments.type, 'easyTierRoutes')
   const oldTimer = [...clock.timers.values()].find((timer) => timer.interval).callback
   routeManager.cancel()
   await routeManager.stop()
@@ -544,12 +544,12 @@ async function main() {
   const queuedRows = queuedRemote.calls.map(validateEnvelope)
   assert.ok(queuedRows[0].Payload.includes('entry 50 '))
   assert.ok(queuedRows[99].Payload.includes('entry 149 '))
-  const coreRaw = JSON.stringify({ method: 'message', data: { type: 'log', data: { LogLevel: 'info', Payload: 'legacy core event', dateTime: new Date().toISOString() } } })
+  const coreRaw = JSON.stringify({ method: 'message', arguments: [{ type: 'log', data: { LogLevel: 'info', Payload: 'batched core event', dateTime: new Date().toISOString() } }] })
   coreListener(coreRaw)
   await settle()
   assert.equal(queuedRemote.calls.at(-1), coreRaw)
   const actionRemote = remoteRecorder()
-  queuedVpn.handleInvokeAction('legacy action response', actionRemote.remote)
+  queuedVpn.handleInvokeMethod('legacy action response', actionRemote.remote)
   queuedVpn.handleQuickSetup('init', 'legacy quick setup response', actionRemote.remote)
   await settle()
   assert.deepEqual(actionRemote.calls, ['legacy action response', 'legacy quick setup response'])
@@ -599,6 +599,28 @@ async function main() {
   assert.ok(vpnRows.some((row) => row.LogLevel === 'error' && row.Payload.includes('2200003')))
 
   resetState()
+  let destroyedAfterTunFailure = false
+  vpn.vpnConnection = {
+    create: async () => 10,
+    destroy: async () => { destroyedAfterTunFailure = true },
+  }
+  context.startTUN = (...args) => {
+    assert.equal(args.length, 7)
+    assert.deepEqual(JSON.parse(args[6]), { mtu: 1400, 'congestion-controller': 'bbr' })
+    return false
+  }
+  options.mtu = 1400
+  options.congestionController = 'bbr'
+  const tunFailure = resultRecorder()
+  plugin.handleStart(tunFailure)
+  await vpn.operation
+  assert.equal(tunFailure.calls[0].code, 'VPN_START_FAILED')
+  assert.ok(tunFailure.calls[0].message.includes('Mihomo TUN 启动失败'))
+  assert.equal(vpn.runTime, 0)
+  assert.equal(destroyedAfterTunFailure, true)
+  context.startTUN = () => true
+
+  resetState()
   const raceResult = resultRecorder()
   new subject.ServicePlugin({ handleStartService: (_options, _time, stub) => {
     callback(stub, 123, '')
@@ -626,8 +648,135 @@ async function main() {
   assert.ok(requestResult.calls[0].message.includes('2200004'))
   noSecret(requestResult.calls[0].message)
   assert.equal(state.runTime, 0)
+
+  resetState()
+  state.runTime = 123
+  state.runState = 'start'
+  const stopVpn = new subject.VpnExtAbility()
+  stopVpn.runTime = 123
+  stopVpn.tunStarted = true
+  const cleanup = { cancels: 0, stops: 0, tun: 0, power: 0, network: 0, connection: 0 }
+  let rejectStop = true
+  stopVpn.easyTier = {
+    cancel() { ++cleanup.cancels },
+    async stop() { ++cleanup.stops; if (rejectStop) throw error(`stop ${secret}`, 2200005) },
+  }
+  stopVpn.powerManager = { unsubscribe() { ++cleanup.power } }
+  stopVpn.networkManager = { unsubscribe() { ++cleanup.network } }
+  stopVpn.vpnConnection = { destroy: async () => { ++cleanup.connection } }
+  context.stopTun = () => { ++cleanup.tun }
+  const stopPlugin = new subject.ServicePlugin({ handleStopService: (stub) => {
+    stopVpn.handleStopService({ sendMessageRequest: async (_code, packet) => {
+      stub.onRemoteMessageRequest(0, packet, new Sequence(), {})
+    } })
+    return Promise.resolve()
+  } })
+  const stopFailure = resultRecorder()
+  stopPlugin.handleStop(stopFailure)
+  await stopVpn.operation
+  assert.equal(stopFailure.calls.length, 1)
+  assert.equal(stopFailure.calls[0].code, 'VPN_STOP_FAILED')
+  assert.ok(stopFailure.calls[0].message.includes('stop'))
+  noSecret(stopFailure.calls[0].message)
+  assert.equal(state.runTime, 0)
+  assert.equal(state.runState, 'stop', 'native runtime still determines state when cleanup reports an error')
+  assert.deepEqual(cleanup, { cancels: 1, stops: 2, tun: 1, power: 2, network: 2, connection: 2 })
+
+  rejectStop = false
+  state.runTime = stopVpn.runTime = 456
+  state.runState = 'start'
+  stopVpn.tunStarted = true
+  const normalStop = resultRecorder()
+  stopPlugin.handleStop(normalStop)
+  await stopVpn.operation
+  assert.deepEqual(normalStop.calls, [{ value: true }])
+  assert.equal(state.runState, 'stop')
+  assert.deepEqual(cleanup, { cancels: 2, stops: 3, tun: 2, power: 3, network: 3, connection: 3 })
+  const alreadyStopped = resultRecorder()
+  stopPlugin.handleStop(alreadyStopped)
+  assert.deepEqual(alreadyStopped.calls, [{ value: true }])
+  assert.equal(cleanup.cancels, 2)
+
+  const queuedRestart = new subject.VpnExtAbility()
+  const queueCleanup = { cancels: 0, stops: 0, tunStarts: 0, tunStops: 0, subscribes: 0, unsubscribes: 0, destroys: 0 }
+  queuedRestart.easyTier = {
+    cancel() { ++queueCleanup.cancels },
+    async stop() { ++queueCleanup.stops },
+  }
+  queuedRestart.powerManager = {
+    subscribe() { ++queueCleanup.subscribes },
+    unsubscribe() { ++queueCleanup.unsubscribes },
+  }
+  let releaseCreate
+  let creates = 0
+  queuedRestart.vpnConnection = {
+    create: () => ++creates === 1 ? new Promise((resolve) => { releaseCreate = resolve }) : Promise.resolve(20),
+    generateVpnId: async () => 'restarted-vpn',
+    destroy: async () => { ++queueCleanup.destroys },
+  }
+  const queueResults = []
+  const queueRemote = (name) => ({ sendMessageRequest: async (_code, packet) => {
+    queueResults.push([name, packet.readLong(), packet.readString()])
+  } })
+  context.startTUN = () => { ++queueCleanup.tunStarts; return true }
+  context.stopTun = () => { ++queueCleanup.tunStops }
+  const restartOptions = { ...options, easyTier: { ...props, enable: false } }
+  queuedRestart.handleStartService(restartOptions, 0, queueRemote('canceled-start'))
+  await settle()
+  assert.equal(creates, 1)
+  queuedRestart.handleStopService(queueRemote('queued-stop'))
+  queuedRestart.handleStartService(restartOptions, 987, queueRemote('restart'))
+  releaseCreate(10)
+  await queuedRestart.operation
+  assert.deepEqual(queueResults, [['canceled-start', 0, ''], ['queued-stop', 0, ''], ['restart', 987, '']])
+  assert.equal(queuedRestart.runTime, 987)
+  assert.equal(queuedRestart.tunStarted, true)
+  assert.deepEqual(queueCleanup, { cancels: 3, stops: 4, tunStarts: 1, tunStops: 0, subscribes: 1, unsubscribes: 4, destroys: 4 })
+  queuedRestart.handleStopService(queueRemote('final-stop'))
+  await queuedRestart.operation
+  assert.deepEqual(queueResults.at(-1), ['final-stop', 0, ''])
+  assert.equal(queuedRestart.tunStarted, false)
+  assert.deepEqual(queueCleanup, { cancels: 4, stops: 5, tunStarts: 1, tunStops: 1, subscribes: 1, unsubscribes: 5, destroys: 5 })
+
+  state.runTime = 789
+  state.runState = 'start'
+  const stopRace = resultRecorder()
+  new subject.ServicePlugin({ handleStopService: (stub) => {
+    callback(stub, 789, `stop rejected ${escaped}`)
+    callback(stub, 0, '')
+    return Promise.reject(error('late stop rejection', 7))
+  } }).handleStop(stopRace)
+  await settle()
+  assert.equal(stopRace.calls.length, 1)
+  assert.equal(stopRace.calls[0].code, 'VPN_STOP_FAILED')
+  noSecret(stopRace.calls[0].message)
+  assert.equal(state.runTime, 789)
+  assert.equal(state.runState, 'start')
+
+  const stopRequest = resultRecorder()
+  let lateStopStub
+  new subject.ServicePlugin({ handleStopService: (stub) => {
+    lateStopStub = stub
+    return Promise.reject(error(`stop request ${escaped}`, 2200006))
+  } }).handleStop(stopRequest)
+  await settle()
+  callback(lateStopStub, 0, '')
+  assert.equal(stopRequest.calls.length, 1)
+  assert.equal(stopRequest.calls[0].code, 'VPN_STOP_FAILED')
+  assert.ok(stopRequest.calls[0].message.includes('2200006'))
+  noSecret(stopRequest.calls[0].message)
+  assert.equal(state.runTime, 789)
+  assert.equal(state.runState, 'start')
+
+  const stillRunning = resultRecorder()
+  new subject.ServicePlugin({ handleStopService: (stub) => {
+    callback(stub, 789, '')
+    return Promise.resolve()
+  } }).handleStop(stillRunning)
+  assert.deepEqual(stillRunning.calls, [{ value: false }])
+  assert.equal(state.runState, 'start')
   assert.equal(intervalCount(), 0)
   assert.equal(clock.timers.size, 0)
-  console.log('PASS: live startup/native logs, route and peer snapshot ABI, direct RTT units, relay/closed/self filtering, same-CIDR heartbeat, transient/malformed/oversized/fallback retention, replay, initial-cleanup cancellation, full IPv4 EasyTier TUN and non-EasyTier split routes, rapid restart/timer ordering, bounded RPC backlog, redaction and legacy callbacks')
+  console.log('PASS: live startup/native logs, route and peer snapshot ABI, direct RTT units, relay/closed/self filtering, same-CIDR heartbeat, transient/malformed/oversized/fallback retention, replay, initial-cleanup cancellation, full IPv4 EasyTier TUN and non-EasyTier split routes, rapid restart/timer ordering, bounded RPC backlog, stop error/runtime contract, cancellation/restart queue cleanup, redaction and legacy callbacks')
 }
 main().catch((failure) => { console.error(failure); process.exitCode = 1 })

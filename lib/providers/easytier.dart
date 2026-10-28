@@ -94,10 +94,7 @@ class EasyTierRoutes extends Notifier<EasyTierRoutesState> {
         .map(normalizeEasyTierCidr)
         .whereType<String>()
         .toSet();
-    final known = {
-      ..._knownCidrs,
-      if (status == 'ready') ...cidrs,
-    };
+    final known = {..._knownCidrs, if (status == 'ready') ...cidrs};
     if (cidrs.length > _maxKnownRoutes || known.length > _maxKnownRoutes) {
       return false;
     }
@@ -124,11 +121,11 @@ class EasyTierRoutes extends Notifier<EasyTierRoutesState> {
   bool markStopped() {
     _peerExpiry?.cancel();
     return _setState(
-    EasyTierRoutesState(
-      sessionId: state.sessionId,
-      revision: state.revision,
-      blockedCidrs: _knownCidrs.toList()..sort(),
-    ),
+      EasyTierRoutesState(
+        sessionId: state.sessionId,
+        revision: state.revision,
+        blockedCidrs: _knownCidrs.toList()..sort(),
+      ),
     );
   }
 
@@ -147,8 +144,11 @@ class EasyTierRoutes extends Notifier<EasyTierRoutesState> {
     final rawPeers = snapshot['peers'];
     final now = DateTime.now().millisecondsSinceEpoch;
     if (!{'starting', 'ready', 'unavailable'}.contains(status) ||
-        capturedAt is! int || capturedAt < 0 || capturedAt > now + 5000 ||
-        rawPeers is! List || rawPeers.length > 512) {
+        capturedAt is! int ||
+        capturedAt < 0 ||
+        capturedAt > now + 5000 ||
+        rawPeers is! List ||
+        rawPeers.length > 512) {
       return EasyTierRoutesState(peerStatus: 'unavailable');
     }
     final peers = <EasyTierPeer>[];
@@ -161,44 +161,90 @@ class EasyTierRoutes extends Notifier<EasyTierRoutesState> {
       final protocols = raw['protocols'];
       final connections = raw['connections'] ?? const [];
       final latency = raw['latencyMs'];
-      if (id is! String || !RegExp(r'^\d{1,10}$').hasMatch(id) ||
-          int.parse(id) > 0xffffffff || !ids.add(id) ||
-          name is! String || name.length > 256 ||
+      if (id is! String ||
+          !RegExp(r'^\d{1,10}$').hasMatch(id) ||
+          int.parse(id) > 0xffffffff ||
+          !ids.add(id) ||
+          name is! String ||
+          name.length > 256 ||
           !{'direct', 'relay'}.contains(type) ||
-          protocols is! List || protocols.length > 16 ||
+          protocols is! List ||
+          protocols.length > 16 ||
           protocols.any((value) => value is! String || value.length > 16) ||
-          connections is! List || connections.length > 4 ||
+          connections is! List ||
+          connections.length > 4 ||
           connections.any((value) => value is! String || value.length > 160) ||
           (raw['ipv4'] != null && _ipv4(raw['ipv4']) == null)) {
         return EasyTierRoutesState(peerStatus: 'unavailable');
       }
-      peers.add(EasyTierPeer(
-        peerId: id,
-        hostname: name.replaceAll(RegExp(r'[\x00-\x1f\x7f\u202a-\u202e\u2066-\u2069]'), ''),
-        ipv4: _ipv4(raw['ipv4']),
-        connectionType: type as String,
-        latencyMs: type == 'direct' && latency is num && latency.isFinite && latency > 0
-            ? latency.toDouble() : null,
-        protocols: List.unmodifiable(protocols.cast<String>().where(
-          (value) => {'tcp', 'udp', 'ws', 'wss', 'quic', 'wg', 'faketcp', 'ring', 'unix'}
-              .contains(value.toLowerCase()),
-        ).map((value) => value.toUpperCase())),
-        connections: type == 'direct' ? List.unmodifiable(connections.cast<String>()
-            .map((value) => value.replaceAll(RegExp(r'[\x00-\x1f\x7f\u202a-\u202e\u2066-\u2069]'), ''))) : const [],
-      ));
+      peers.add(
+        EasyTierPeer(
+          peerId: id,
+          hostname: name.replaceAll(
+            RegExp(r'[\x00-\x1f\x7f\u202a-\u202e\u2066-\u2069]'),
+            '',
+          ),
+          ipv4: _ipv4(raw['ipv4']),
+          connectionType: type as String,
+          latencyMs:
+              type == 'direct' &&
+                  latency is num &&
+                  latency.isFinite &&
+                  latency > 0
+              ? latency.toDouble()
+              : null,
+          protocols: List.unmodifiable(
+            protocols
+                .cast<String>()
+                .where(
+                  (value) => {
+                    'tcp',
+                    'udp',
+                    'ws',
+                    'wss',
+                    'quic',
+                    'wg',
+                    'faketcp',
+                    'ring',
+                    'unix',
+                  }.contains(value.toLowerCase()),
+                )
+                .map((value) => value.toUpperCase()),
+          ),
+          connections: type == 'direct'
+              ? List.unmodifiable(
+                  connections.cast<String>().map(
+                    (value) => value.replaceAll(
+                      RegExp(r'[\x00-\x1f\x7f\u202a-\u202e\u2066-\u2069]'),
+                      '',
+                    ),
+                  ),
+                )
+              : const [],
+        ),
+      );
     }
-    if (snapshot['virtualIpv4'] != null && _ipv4(snapshot['virtualIpv4']) == null) {
+    if (snapshot['virtualIpv4'] != null &&
+        _ipv4(snapshot['virtualIpv4']) == null) {
       return EasyTierRoutesState(peerStatus: 'unavailable');
     }
-    final expiresIn = (status == 'starting' ? 35000 : 10000) - (now - capturedAt);
-    final effective = status != 'unavailable' && expiresIn <= 0 ? 'stale' : status as String;
+    final expiresIn =
+        (status == 'starting' ? 35000 : 10000) - (now - capturedAt);
+    final effective = status != 'unavailable' && expiresIn <= 0
+        ? 'stale'
+        : status as String;
     if (effective == 'ready' || effective == 'starting') {
       _peerExpiry = Timer(Duration(milliseconds: expiresIn), () {
         // Stale display data must never withdraw routes or reload the proxy.
         state = EasyTierRoutesState(
-          sessionId: state.sessionId, revision: state.revision, status: state.status,
-          activeCidrs: state.activeCidrs, blockedCidrs: state.blockedCidrs,
-          peerStatus: 'stale', virtualIpv4: state.virtualIpv4, peers: state.peers,
+          sessionId: state.sessionId,
+          revision: state.revision,
+          status: state.status,
+          activeCidrs: state.activeCidrs,
+          blockedCidrs: state.blockedCidrs,
+          peerStatus: 'stale',
+          virtualIpv4: state.virtualIpv4,
+          peers: state.peers,
         );
       });
     }
@@ -210,13 +256,15 @@ class EasyTierRoutes extends Notifier<EasyTierRoutesState> {
   }
 
   String? _ipv4(Object? value) {
-    if (value is! String || !RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(value)) return null;
+    if (value is! String || !RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(value))
+      return null;
     final address = InternetAddress.tryParse(value);
     return address?.type == InternetAddressType.IPv4 ? address!.address : null;
   }
 
   bool _setState(EasyTierRoutesState next) {
-    final changed = !_sameRoutes(state.activeCidrs, next.activeCidrs) ||
+    final changed =
+        !_sameRoutes(state.activeCidrs, next.activeCidrs) ||
         !_sameRoutes(state.blockedCidrs, next.blockedCidrs);
     state = next;
     return changed;

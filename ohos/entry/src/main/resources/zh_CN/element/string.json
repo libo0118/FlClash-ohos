@@ -47,6 +47,12 @@
     {
       "name": "widget_open",
       "value": "打开应用"
-    }
+    },
+    {"name":"widget_easytier_ready","value":"已就绪"},
+    {"name":"widget_easytier_starting","value":"连接中"},
+    {"name":"widget_easytier_stopped","value":"已停止"},
+    {"name":"widget_easytier_unavailable","value":"暂不可用"},
+    {"name":"widget_easytier_unknown","value":"状态未知"},
+    {"name":"widget_unknown","value":"VPN 状态未知，请打开应用"}
   ]
 }
