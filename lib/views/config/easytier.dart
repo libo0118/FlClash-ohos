@@ -26,60 +26,60 @@ class EasyTierPage extends StatelessWidget {
   );
 }
 
-class EasyTierSettings extends ConsumerWidget {
-  const EasyTierSettings({super.key});
-
-  Future<void> _update(
-    BuildContext context,
-    WidgetRef ref, {
-    bool? enable,
-    bool? ipv6,
-  }) async {
-    final l10n = context.appLocalizations;
-    if (ref.read(isStartProvider)) {
-      context.showNotifier(l10n.easyTierStopBeforeEditing);
+Future<void> updateEasyTierSettings(
+  BuildContext context,
+  WidgetRef ref, {
+  bool? enable,
+  bool? ipv6,
+}) async {
+  final l10n = context.appLocalizations;
+  if (ref.read(isStartProvider)) {
+    context.showNotifier(l10n.easyTierStopBeforeEditing);
+    return;
+  }
+  var props = ref.read(appSettingProvider).easyTier;
+  if (ipv6 != null) {
+    props = props.copyWith(ipv6: ipv6);
+  } else if (enable == null || (enable && !isEasyTierConfigValid(props))) {
+    final result = await showFormSheet<EasyTierProps>(
+      context: context,
+      builder: (_) => EasyTierConfigurationDialog(
+        props: props.copyWith(enable: enable ?? props.enable),
+      ),
+    );
+    if (result == null || !context.mounted) return;
+    props = result;
+  } else {
+    props = props.copyWith(enable: enable);
+  }
+  if (props.enable) {
+    final patch = ref.read(patchClashConfigProvider);
+    if ([
+      patch.mixedPort,
+      patch.port,
+      patch.socksPort,
+      patch.redirPort,
+      patch.tproxyPort,
+    ].contains(easyTierSocksPort)) {
+      context.showNotifier(l10n.portConflictTip);
       return;
     }
-    var props = ref.read(appSettingProvider).easyTier;
-    if (ipv6 != null) {
-      props = props.copyWith(ipv6: ipv6);
-    } else if (enable == null || (enable && !isEasyTierConfigValid(props))) {
-      final result = await showFormSheet<EasyTierProps>(
-        context: context,
-        builder: (_) => EasyTierConfigurationDialog(
-          props: props.copyWith(enable: enable ?? props.enable),
-        ),
-      );
-      if (result == null || !context.mounted) return;
-      props = result;
-    } else {
-      props = props.copyWith(enable: enable);
-    }
-    if (props.enable) {
-      final patch = ref.read(patchClashConfigProvider);
-      if ([
-        patch.mixedPort,
-        patch.port,
-        patch.socksPort,
-        patch.redirPort,
-        patch.tproxyPort,
-      ].contains(easyTierSocksPort)) {
-        context.showNotifier(l10n.portConflictTip);
-        return;
-      }
-      ref
-          .read(vpnSettingProvider.notifier)
-          .update((state) => state.copyWith(enable: true));
-      ref
-          .read(patchClashConfigProvider.notifier)
-          .update((state) => state.copyWith(mode: Mode.rule));
-    }
-    final nextProps = props;
     ref
-        .read(appSettingProvider.notifier)
-        .update((state) => state.copyWith(easyTier: nextProps));
-    ref.read(setupActionProvider.notifier).applyProfileDebounce(force: true);
+        .read(vpnSettingProvider.notifier)
+        .update((state) => state.copyWith(enable: true));
+    ref
+        .read(patchClashConfigProvider.notifier)
+        .update((state) => state.copyWith(mode: Mode.rule));
   }
+  final nextProps = props;
+  ref
+      .read(appSettingProvider.notifier)
+      .update((state) => state.copyWith(easyTier: nextProps));
+  ref.read(setupActionProvider.notifier).applyProfileDebounce(force: true);
+}
+
+class EasyTierSettings extends ConsumerWidget {
+  const EasyTierSettings({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -103,14 +103,15 @@ class EasyTierSettings extends ConsumerWidget {
               selector: appSettingProvider.select(
                 (state) => state.easyTier.enable,
               ),
-              onChanged: (ref, value) => _update(context, ref, enable: value),
+              onChanged: (ref, value) =>
+                  updateEasyTierSettings(context, ref, enable: value),
             ),
             ListItem(
               title: Text(l10n.easyTierConfiguration),
               subtitle: Text(
                 props.networkName.isEmpty ? l10n.none : props.networkName,
               ),
-              onTap: () => _update(context, ref),
+              onTap: () => updateEasyTierSettings(context, ref),
             ),
           ],
           footer: l10n.easyTierDescription,
@@ -122,7 +123,8 @@ class EasyTierSettings extends ConsumerWidget {
               selector: appSettingProvider.select(
                 (state) => state.easyTier.ipv6,
               ),
-              onChanged: (ref, value) => _update(context, ref, ipv6: value),
+              onChanged: (ref, value) =>
+                  updateEasyTierSettings(context, ref, ipv6: value),
             ),
           ],
           footer: l10n.easyTierIpv6Description,

@@ -7,6 +7,7 @@ import 'package:fl_clash/common/constant.dart';
 import 'package:fl_clash/common/service_probe.dart' show routedOutbound;
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/views/dashboard/dashboard.dart';
+import 'package:fl_clash/views/dashboard/layout.dart';
 import 'package:fl_clash/views/dashboard/widgets/outbound_mode.dart';
 import 'package:fl_clash/views/dashboard/widgets/ohos_vpn.dart';
 import 'package:fl_clash/models/models.dart';
@@ -18,6 +19,8 @@ import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/ui/ui.dart';
 import 'package:fl_clash/state.dart';
 import 'package:fl_clash/views/dashboard/widgets/easytier_peers.dart';
+import 'package:fl_clash/views/dashboard/widgets/card.dart';
+import 'package:fl_clash/views/dashboard/widgets/intranet_ip.dart';
 import 'package:fl_clash/views/config/easytier.dart';
 import 'package:fl_clash/views/easytier/easytier.dart';
 import 'package:fl_clash/widgets/widgets.dart';
@@ -80,11 +83,12 @@ List<EasyTierPeer> _nodes() => [
 EasyTierRoutesState _state({
   String status = 'ready',
   List<EasyTierPeer> peers = const [_direct, _relay],
+  String? virtualIpv4 = '10.126.126.159',
 }) => EasyTierRoutesState(
   sessionId: 'session-1',
   status: status == 'ready' ? 'ready' : 'stopped',
   peerStatus: status,
-  virtualIpv4: '10.126.126.159',
+  virtualIpv4: virtualIpv4,
   peers: peers,
 );
 
@@ -116,57 +120,247 @@ void main() {
     }
   });
 
-  testWidgets('homepage entry is one compact row without network details', (
-    tester,
-  ) async {
-    var opened = 0;
-    await _pumpBody(
-      tester,
-      EasyTierCompactTile(
-        state: _state(peers: _nodes()),
-        enabled: true,
-        onTap: () => opened++,
-      ),
-    );
-    expect(find.text('Running · 5 nodes'), findsOneWidget);
-    expect(find.byType(SelectableText), findsNothing);
-    expect(find.textContaining('ms'), findsNothing);
-    expect(tester.getSize(find.byKey(_entryKey)).height, lessThanOrEqualTo(80));
-    await tester.tap(find.text('EasyTier'));
-    expect(opened, 1);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('homepage entry remains compact and tappable in every state', (
-    tester,
-  ) async {
-    var opened = 0;
-    for (final status in [
-      'starting',
-      'stopped',
-      'stale',
-      'unavailable',
-      'disabled',
-    ]) {
-      await _pumpBody(
-        tester,
-        EasyTierCompactTile(
-          state: _state(status: status),
-          enabled: status != 'disabled',
-          onTap: () => opened++,
+  testWidgets(
+    'homepage IP card reuses LAN hierarchy and copies only its address',
+    (tester) async {
+      var opened = 0;
+      String? copied;
+      var copies = 0;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied = (call.arguments as Map)['text'] as String;
+            copies++;
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
         ),
       );
-      expect(
-        tester.getSize(find.byKey(_entryKey)).height,
-        lessThanOrEqualTo(80),
+      await _pumpBody(
+        tester,
+        Column(
+          children: [
+            const IntranetIpCard(),
+            EasyTierIpTile(
+              state: _state(peers: _nodes()),
+              enabled: true,
+              onChanged: (_) {},
+              onTap: () => opened++,
+            ),
+          ],
+        ),
       );
+      expect(find.text('Running'), findsOneWidget);
+      expect(find.text('10.126.126.159'), findsOneWidget);
       expect(find.byType(SelectableText), findsNothing);
+      expect(find.textContaining('ms'), findsNothing);
+      final lan = tester.getSize(find.byType(IntranetIpCard));
+      expect(tester.getSize(find.byKey(_entryKey)), lan);
+      final copy = find.descendant(
+        of: find.byKey(_entryKey),
+        matching: find.byTooltip('Copy'),
+      );
+      await tester.tap(copy);
+      await tester.pump();
+      expect(copied, '10.126.126.159');
+      expect(opened, 0);
+      expect(copies, 1);
       await tester.tap(find.text('EasyTier'));
-      expect(tester.takeException(), isNull, reason: status);
-    }
-    expect(opened, 5);
-    expect(find.text('Not enabled'), findsOneWidget);
-  });
+      expect(opened, 1);
+      expect(copies, 1);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'homepage card hides old addresses and remains tappable in every state',
+    (tester) async {
+      var opened = 0;
+      for (final status in [
+        'starting',
+        'loading',
+        'unknown',
+        'stopped',
+        'stale',
+        'unavailable',
+        'disabled',
+      ]) {
+        await _pumpBody(
+          tester,
+          EasyTierIpTile(
+            state: _state(status: status),
+            enabled: status != 'disabled',
+            onTap: () => opened++,
+          ),
+        );
+        expect(find.text('10.126.126.159'), findsNothing);
+        expect(
+          tester
+              .widget<DashboardIconButton>(
+                find.descendant(
+                  of: find.byKey(_entryKey),
+                  matching: find.byType(DashboardIconButton),
+                ),
+              )
+              .onPressed,
+          isNull,
+        );
+        expect(find.byType(SelectableText), findsNothing);
+        await tester.tap(find.text('EasyTier'));
+        expect(tester.takeException(), isNull, reason: status);
+      }
+      expect(opened, 7);
+      expect(find.text('Not enabled'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'homepage switch keeps the running gate and does not stop the VPN',
+    (tester) async {
+      final container = _container(_state());
+      addTearDown(container.dispose);
+      await _pumpBody(
+        tester,
+        const EasyTierDashboardTile(),
+        container: container,
+      );
+      final before = container.read(appSettingProvider).easyTier;
+      await tester.tap(find.byKey(const ValueKey('easytier-dashboard-toggle')));
+      await tester.pumpAndSettle();
+      expect(container.read(appSettingProvider).easyTier, before);
+      expect(container.read(isStartProvider), isTrue);
+      expect(find.byType(EasyTierDetailsPage), findsNothing);
+      expect(find.byType(EasyTierConfigurationDialog), findsNothing);
+      expect(
+        (container.read(setupActionProvider.notifier) as _SettingsSetup)
+            .applyCount,
+        0,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'homepage switch uses existing enable and disable settings path',
+    (tester) async {
+      final container = _container(
+        _state(status: 'stopped'),
+        enabled: false,
+        running: false,
+      );
+      addTearDown(container.dispose);
+      await _pumpBody(
+        tester,
+        const EasyTierDashboardTile(),
+        container: container,
+      );
+      await tester.tap(find.byKey(const ValueKey('easytier-dashboard-toggle')));
+      await tester.pumpAndSettle();
+      expect(container.read(appSettingProvider).easyTier.enable, isTrue);
+      expect(container.read(vpnSettingProvider).enable, isTrue);
+      expect(container.read(patchClashConfigProvider).mode, Mode.rule);
+      expect(container.read(isStartProvider), isFalse);
+      expect(find.text('Stopped'), findsOneWidget);
+      expect(find.text('10.126.126.159'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('easytier-dashboard-toggle')));
+      await tester.pumpAndSettle();
+      expect(container.read(appSettingProvider).easyTier.enable, isFalse);
+      expect(container.read(vpnSettingProvider).enable, isTrue);
+      expect(
+        (container.read(setupActionProvider.notifier) as _SettingsSetup)
+            .applyCount,
+        2,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'unconfigured homepage switch opens one form and cancellation preserves settings',
+    (tester) async {
+      final container = _container(
+        _state(status: 'stopped'),
+        enabled: false,
+        running: false,
+        configured: false,
+      );
+      addTearDown(container.dispose);
+      await _pumpBody(
+        tester,
+        const EasyTierDashboardTile(),
+        container: container,
+      );
+      final before = container.read(appSettingProvider).easyTier;
+      final change = tester
+          .widget<EasyTierIpTile>(find.byType(EasyTierIpTile))
+          .onChanged!;
+      change(true);
+      change(true);
+      await tester.pumpAndSettle();
+      expect(find.byType(EasyTierConfigurationDialog), findsOneWidget);
+      expect(
+        tester.widget<EasyTierIpTile>(find.byType(EasyTierIpTile)).onChanged,
+        isNull,
+      );
+      expect(container.read(appSettingProvider).easyTier, before);
+      Navigator.of(
+        tester.element(find.byType(EasyTierConfigurationDialog)),
+      ).pop();
+      await tester.pumpAndSettle();
+      expect(container.read(appSettingProvider).easyTier, before);
+      expect(
+        tester.widget<EasyTierIpTile>(find.byType(EasyTierIpTile)).onChanged,
+        isNotNull,
+      );
+      expect(
+        (container.read(setupActionProvider.notifier) as _SettingsSetup)
+            .applyCount,
+        0,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'unassigned or unconfirmed runtime never provides a copyable IP',
+    (tester) async {
+      for (final vpnRunning in [true, false, null]) {
+        await _pumpBody(
+          tester,
+          EasyTierIpTile(
+            state: _state(
+              virtualIpv4: vpnRunning == true ? null : '10.126.126.159',
+            ),
+            enabled: true,
+            vpnRunning: vpnRunning,
+            onTap: () {},
+          ),
+        );
+        expect(find.text('10.126.126.159'), findsNothing);
+        expect(
+          tester
+              .widget<DashboardIconButton>(find.byType(DashboardIconButton))
+              .onPressed,
+          isNull,
+        );
+        expect(
+          find.text(switch (vpnRunning) {
+            true => 'IPv4 not assigned',
+            false => 'Stopped',
+            null => 'Unknown',
+          }),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      }
+    },
+  );
 
   testWidgets(
     'entry opens live details, settings, and returns through both pages',
@@ -366,7 +560,7 @@ void main() {
     }
     await _pumpBody(
       tester,
-      EasyTierCompactTile(
+      EasyTierIpTile(
         state: _state(status: 'unavailable'),
         enabled: true,
         onTap: () {},
@@ -416,7 +610,7 @@ void main() {
     }
   });
 
-  testWidgets('compact entry follows the saved cards in the real dashboard', (
+  testWidgets('IP card follows the saved cards in the real dashboard', (
     tester,
   ) async {
     await _pumpApp(tester, _HomepageFixture(state: _state()));
@@ -424,7 +618,7 @@ void main() {
     for (final type in [OutboundModeCard, OhosVpnControl]) {
       expect(entry, greaterThan(tester.getBottomLeft(find.byType(type)).dy));
     }
-    expect(tester.getSize(find.byKey(_entryKey)).height, lessThanOrEqualTo(80));
+    expect(find.text('10.126.126.159'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -491,7 +685,8 @@ void main() {
     );
     expect(saved.dashboardWidgets, isNot(contains(DashboardWidget.easyTier)));
     final add = find.byTooltip('Add EasyTier');
-    await tester.ensureVisible(add);
+    await Scrollable.ensureVisible(tester.element(add), alignment: 0.5);
+    await tester.pump(const Duration(milliseconds: 800));
     await tester.tap(add);
     await tester.pump(const Duration(milliseconds: 800));
     expect(container.read(appSettingProvider).dashboardWidgets, original);
@@ -510,18 +705,18 @@ void main() {
       _HomepageFixture(state: _state()),
       container: container,
     );
-    expect(find.text('Running'), findsOneWidget);
+    expect(find.text('Running'), findsNWidgets(2));
     request = Completer<bool>();
     container.invalidate(ohosVpnRunningProvider);
     await tester.pump();
     expect(container.read(isStartProvider), isTrue);
     expect(container.read(ohosVpnRunningProvider).hasValue, isTrue);
-    expect(find.text('Unknown'), findsNWidgets(2));
+    expect(find.text('Unknown'), findsNWidgets(3));
     expect(find.text('Running'), findsNothing);
     expect(find.text('Connected'), findsNothing);
     request.completeError(StateError('native unavailable'), StackTrace.empty);
     await tester.pump();
-    expect(find.text('Unknown'), findsOneWidget);
+    expect(find.text('Unknown'), findsNWidgets(2));
     expect(find.text('Running'), findsNothing);
     expect(
       find.descendant(
@@ -533,7 +728,64 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('exports real compact homepage and independent details renders', (
+  testWidgets('exports IP cards at 320 and 390 dp in every state', (
+    tester,
+  ) async {
+    for (final (name, width, brightness, scale, status, enabled, vpn) in [
+      ('card-light', 390.0, Brightness.light, 1.0, 'ready', true, true),
+      ('card-dark', 390.0, Brightness.dark, 1.0, 'ready', true, true),
+      ('card-320', 320.0, Brightness.light, 1.0, 'ready', true, true),
+      ('card-390-large', 390.0, Brightness.dark, 1.6, 'ready', true, true),
+      ('card-320-large', 320.0, Brightness.light, 1.6, 'ready', true, true),
+      ('card-stale', 390.0, Brightness.dark, 1.0, 'stale', true, true),
+      ('card-stopped', 390.0, Brightness.light, 1.0, 'stopped', true, false),
+      ('card-disabled', 390.0, Brightness.light, 1.0, 'ready', false, true),
+      ('card-loading', 390.0, Brightness.light, 1.0, 'loading', true, true),
+      ('card-unknown', 320.0, Brightness.dark, 1.6, 'ready', true, null),
+      (
+        'card-unavailable',
+        320.0,
+        Brightness.light,
+        1.6,
+        'unavailable',
+        true,
+        true,
+      ),
+      ('card-unassigned', 320.0, Brightness.light, 1.6, 'ready', true, true),
+    ]) {
+      await _pumpBody(
+        tester,
+        Column(
+          spacing: 16,
+          children: [
+            const IntranetIpCard(),
+            EasyTierIpTile(
+              state: _state(
+                status: status,
+                virtualIpv4: name == 'card-unassigned'
+                    ? null
+                    : '10.126.126.159',
+              ),
+              enabled: enabled,
+              vpnRunning: vpn,
+              onChanged: (_) {},
+              onTap: () {},
+            ),
+          ],
+        ),
+        size: Size(width, 900),
+        brightness: brightness,
+        textScale: scale,
+        locale: const Locale('zh', 'CN'),
+      );
+      expect(tester.takeException(), isNull, reason: name);
+      await _capture(tester, visualDir!, name);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    }
+  }, skip: visualDir == null || visualDir.isEmpty);
+
+  testWidgets('exports real homepage and independent details renders', (
     tester,
   ) async {
     for (final (name, brightness, textScale, status) in [
@@ -550,7 +802,7 @@ void main() {
           state: _state(status: status, peers: _nodes()),
           enabled: status != 'disabled',
         ),
-        size: const Size(390, 900),
+        size: const Size(390, 1200),
         brightness: brightness,
         textScale: textScale,
         locale: const Locale('zh', 'CN'),
@@ -663,6 +915,7 @@ ProviderContainer _container(
   EasyTierRoutesState state, {
   bool enabled = true,
   bool running = true,
+  bool configured = true,
   Future<bool> Function(Ref)? vpnStatus,
 }) => ProviderContainer(
   overrides: [
@@ -670,14 +923,17 @@ ProviderContainer _container(
       (_, _) => AppSettingProps(
         easyTier: EasyTierProps(
           enable: enabled,
-          networkName: 'office-net',
-          networkSecret: 'test-secret',
-          peerUrls: const ['tcp://gateway.invalid:11010'],
+          networkName: configured ? 'office-net' : '',
+          networkSecret: configured ? 'test-secret' : '',
+          peerUrls: configured
+              ? const ['tcp://gateway.invalid:11010']
+              : const [],
         ),
         dashboardWidgets: const [
           DashboardWidget.currentOutbound,
           DashboardWidget.outboundMode,
           DashboardWidget.vpnButton,
+          DashboardWidget.intranetIp,
           DashboardWidget.easyTier,
         ],
       ),
@@ -733,6 +989,8 @@ Future<void> _pumpBody(
   Widget content, {
   Size size = const Size(390, 900),
   double textScale = 1,
+  Brightness brightness = Brightness.light,
+  Locale locale = const Locale('en'),
   ProviderContainer? container,
 }) => _pumpApp(
   tester,
@@ -745,6 +1003,8 @@ Future<void> _pumpBody(
   ),
   size: size,
   textScale: textScale,
+  brightness: brightness,
+  locale: locale,
   container: container,
 );
 
@@ -786,7 +1046,11 @@ Future<void> _pumpApp(
         data: MediaQuery.of(
           context,
         ).copyWith(textScaler: TextScaler.linear(textScale)),
-        child: child,
+        child: DashboardDensityScope(
+          density: DashboardDensity.mobile,
+          scale: textScale,
+          child: child,
+        ),
       ),
     ),
     child: home,
@@ -831,11 +1095,13 @@ class _RoutesFixture extends EasyTierRoutes {
 }
 
 class _SettingsSetup extends SetupAction {
+  var applyCount = 0;
   @override
   void build() {}
 
   @override
-  void applyProfileDebounce({bool silence = false, bool force = false}) {}
+  void applyProfileDebounce({bool silence = false, bool force = false}) =>
+      applyCount++;
 }
 
 class _IpsFixture extends OutboundIpProbe {
