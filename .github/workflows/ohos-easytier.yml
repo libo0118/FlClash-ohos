@@ -186,6 +186,11 @@ jobs:
           path: ~/.pub-cache
           key: ${{ runner.os }}-ohos-pub-${{ env.FLUTTER_REF }}-${{ hashFiles('pubspec.lock') }}
           restore-keys: ${{ runner.os }}-ohos-pub-${{ env.FLUTTER_REF }}-
+      - name: Configure and verify the Flutter HarmonyOS SDK
+        run: |
+          flutter config --ohos-sdk "$HOS_SDK_HOME"
+          dart --packages="$RUNNER_TOOL_CACHE/flutter-ohos/packages/flutter_tools/.dart_tool/package_config.json" \
+            .github/verify-ohos-sdk.dart "$HOS_SDK_HOME" "$OHOS_NDK_HOME"
       - run: flutter pub get
       - name: Patch UI dependencies for OpenHarmony
         run: node .github/patch-ui-ohos.cjs
@@ -274,6 +279,11 @@ jobs:
           path: ~/.pub-cache
           key: ${{ runner.os }}-ohos-pub-${{ env.FLUTTER_REF }}-${{ hashFiles('pubspec.lock') }}
           restore-keys: ${{ runner.os }}-ohos-pub-${{ env.FLUTTER_REF }}-
+      - name: Configure and verify the Flutter HarmonyOS SDK
+        run: |
+          flutter config --ohos-sdk "$HOS_SDK_HOME"
+          dart --packages="$RUNNER_TOOL_CACHE/flutter-ohos/packages/flutter_tools/.dart_tool/package_config.json" \
+            .github/verify-ohos-sdk.dart "$HOS_SDK_HOME" "$OHOS_NDK_HOME"
       - name: Restore the tested generated sources
         run: |
           cp "$RUNNER_TEMP/checked-sources/pubspec.lock" pubspec.lock

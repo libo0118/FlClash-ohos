@@ -133,20 +133,16 @@ Map<String, String> createBuildEnvironment(String env) {
   return {'APP_ENV': env};
 }
 
-List<String> createDistributorActivateArgs(String platform) {
-  final isOhos = platform == 'ohos';
+List<String> createDistributorActivateArgs() {
   return [
     'pub',
     'global',
     'activate',
     '-s',
     'git',
-    isOhos
-        ? 'https://github.com/tljk/flutter_distributor.git'
-        : 'https://github.com/chen08209/flutter_distributor.git',
+    'https://github.com/chen08209/flutter_distributor.git',
     '--git-ref',
-    // The OHOS fork resolves unsigned HAP/APP outputs from --no-codesign.
-    isOhos ? '71966a102e6a283a14c6e953e98f9d39008efb8a' : 'v0.6.11-flclash.4',
+    'v0.6.11-flclash.4',
     '--git-path',
     'packages/flutter_distributor',
   ];
@@ -197,6 +193,10 @@ Future<int> _package(
   final file = File(p.join(rootDir, 'env.json'));
   await file.writeAsString(jsonEncode(createBuildEnvironment(env)));
 
+  if (platform == 'ohos') {
+    return packageOhos(rootDir, targets, verbose: verbose);
+  }
+
   final flutterBuildArgs = createFlutterBuildArgs(
     platform: platform,
     verbose: verbose,
@@ -211,41 +211,132 @@ Future<int> _package(
 
   final activateResult = await Process.run(
     'dart',
-    createDistributorActivateArgs(platform),
+    createDistributorActivateArgs(),
   );
   if (activateResult.exitCode != 0) {
     stderr.write(activateResult.stderr);
     return activateResult.exitCode;
   }
 
+  return _runCommand('flutter_distributor', [
+    'package',
+    '--skip-clean',
+    '--platform',
+    platform,
+    '--targets',
+    targets,
+    if (androidArch != null)
+      '--build-target-platform=${_androidFlutterTarget[androidArch]!}',
+    if (flutterBuildArgs.isNotEmpty)
+      '--flutter-build-args=${flutterBuildArgs.join(',')}',
+    ...descriptionArgs,
+  ], workingDirectory: rootDir);
+}
+
+Future<int> packageOhos(
+  String rootDir,
+  String targets, {
+  required bool verbose,
+  Future<int> Function(
+        String executable,
+        List<String> arguments, {
+        required String workingDirectory,
+        Map<String, String>? environment,
+      })
+      runCommand =
+      _runCommand,
+}) async {
+  final formats = targets.split(',').map((target) => target.trim()).toSet();
+  if (formats.any((target) => target != 'hap' && target != 'app')) {
+    throw ArgumentError.value(targets, 'targets', 'OHOS supports hap,app');
+  }
+  final pubspec = loadYaml(
+    await File(p.join(rootDir, 'pubspec.yaml')).readAsString(),
+  );
+  final version = RegExp(
+    r'^([0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?)\+([0-9]+)$',
+  ).firstMatch(pubspec['version'].toString());
+  if (version == null) {
+    throw const FormatException(
+      'OHOS requires a pubspec version with a build number',
+    );
+  }
+  final buildName = version[1]!;
+  final buildNumber = version[2]!;
+  final options = loadYaml(
+    await File(p.join(rootDir, 'distribute_options.yaml')).readAsString(),
+  );
+  final dist = Directory(p.join(rootDir, options['output'] as String));
+  File destination(String format) =>
+      File(p.join(dist.path, '${options['app_name']}-$buildName-ohos.$format'));
+  for (final format in formats) {
+    final file = destination(format);
+    if (await file.exists()) await file.delete();
+  }
+  for (final format in formats) {
+    // shortcut: entry/default filenames match this app's OHOS profiles; update together.
+    final source = File(
+      format == 'hap'
+          ? p.join(
+              rootDir,
+              'ohos/entry/build/default/outputs/default/entry-default-unsigned.hap',
+            )
+          : p.join(
+              rootDir,
+              'ohos/build/outputs/default/ohos-default-unsigned.app',
+            ),
+    );
+    // A successful command must produce a new package, never reuse an earlier build.
+    if (await source.exists()) await source.delete();
+    final exitCode = await runCommand(
+      'flutter',
+      [
+        'build',
+        format,
+        '--release',
+        ...createFlutterBuildArgs(
+          platform: 'ohos',
+          verbose: verbose,
+        ).map((argument) => '--$argument'),
+        '--build-name=$buildName',
+        '--build-number=$buildNumber',
+      ],
+      workingDirectory: rootDir,
+      environment: {'FLCLASH_OHOS_BUILD': '1'},
+    );
+    if (exitCode != 0) return exitCode;
+    if (!await source.exists() || await source.length() == 0) {
+      stderr.writeln(
+        'Flutter did not produce a nonempty unsigned package: ${source.path}',
+      );
+      return 1;
+    }
+    await dist.create(recursive: true);
+    await source.copy(destination(format).path);
+  }
+  return 0;
+}
+
+Future<int> _runCommand(
+  String executable,
+  List<String> arguments, {
+  required String workingDirectory,
+  Map<String, String>? environment,
+}) async {
+  stdout.writeln('exec: $executable ${arguments.join(' ')}');
   final process = await Process.start(
-    'flutter_distributor',
-    [
-      'package',
-      '--skip-clean',
-      '--platform',
-      platform,
-      '--targets',
-      targets,
-      if (androidArch != null)
-        '--build-target-platform=${_androidFlutterTarget[androidArch]!}',
-      if (flutterBuildArgs.isNotEmpty)
-        '--flutter-build-args=${flutterBuildArgs.join(',')}',
-      ...descriptionArgs,
-    ],
+    executable,
+    arguments,
+    workingDirectory: workingDirectory,
     includeParentEnvironment: true,
-    environment: {if (platform == 'ohos') 'FLCLASH_OHOS_BUILD': '1'},
+    environment: environment,
     runInShell: Platform.isWindows,
   );
-
-  process.stdout.listen((data) {
-    stdout.write(utf8.decode(data));
-  });
-  process.stderr.listen((data) {
-    stderr.write(utf8.decode(data));
-  });
-  final exitCode = await process.exitCode;
-  return exitCode;
+  await Future.wait([
+    stdout.addStream(process.stdout),
+    stderr.addStream(process.stderr),
+  ]);
+  return process.exitCode;
 }
 
 String _detectArch() {
